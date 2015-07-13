@@ -7,34 +7,38 @@ import requests
 
 @app.route('/', methods=["GET"])
 def index():
+    print("migrator called")
     return Response(status=200)
 
 
 @app.route('/begin', methods=["POST"])
 def start_migration():
-    if request.headers['Content-Type'] != "application/json":
-        return Response(status=415)  # 415 (Unsupported Media Type)
+    print("start_migration called")
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
 
-    json_data = request.get_json(force=True)
-
-    url = app.config['B2B_LEGACY_URL'] + '/land_charge'
+    url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
+    print(url)
     headers = {'Content-Type': 'application/json'}
-    response = requests.get(url, data=json.dumps(json_data), headers=headers)
+    print("calling legacy url")
+    response = requests.get(url, headers=headers)
 
+    print(response.status_code)
     if response.status_code == 200:
-        data = response.json
+        data = response.json()
+        print(data)
         for rows in data:
             registration = extract_data(rows)
-            insert_data(registration)
+            registration_status_code = insert_data(registration)
 
-            if response.status_code == 200:
-                return Response(status=200, mimetype='application/json')
-            else:
-                logging.error("Received " + str(response.status_code))
-                return Response(status=response.status_code)
+            if registration_status_code != 200:
+                logging.error("Received " + str(registration_status_code))
+                return Response(status=registration_status_code)
     else:
         logging.error("Received " + str(response.status_code))
         return Response(status=response.status_code)
+
+    return Response(status=200, mimetype='application/json')
 
 
 def extract_data(rows):
@@ -45,7 +49,7 @@ def extract_data(rows):
         hex_codes.append(rows['punctuation_code'][count:(count+2)])
         count += 2
 
-    orig_name = rows["rem_name"] + rows["name"][::-1]
+    orig_name = rows["remainder_name"] + rows["reverse_name"][::-1]
     print("orig_name: ", orig_name)
     name_list = []
     for items in hex_codes:
@@ -57,9 +61,9 @@ def extract_data(rows):
     name_list.append(orig_name)
     full_name = ''.join(name_list)
     surname_pos = full_name.index('*')
-    forename = full_name[:surname_pos]
+    forenames = full_name[:surname_pos]
     surname = full_name[surname_pos + 1:]
-    print(forename, surname)
+    print(forenames, surname)
 
     registration = {
         "key_number": "2244095",
@@ -67,7 +71,7 @@ def extract_data(rows):
         "application_ref": " ",
         "date": rows['registration_date'],
         "debtor_name": {
-            "forename": [forename],
+            "forenames": [forenames],
             "surname": surname
         },
         "debtor_alternative_name": [],
@@ -80,7 +84,7 @@ def extract_data(rows):
             }
         ],
         "residence_withheld": False,
-        "date_of_birth": " ",
+        "date_of_birth": "1975-10-07",
         "investment_property": []
     }
     return registration
@@ -90,9 +94,11 @@ def insert_data(registration):
     json_data = registration
     url = app.config['BANKRUPTCY_DATABASE_API'] + '/register'
     headers = {'Content-Type': 'application/json'}
-    response = requests.get(url, data=json.dumps(json_data), headers=headers)
+    response = requests.post(url, data=json.dumps(json_data), headers=headers)
 
-    return Response(status=response.status_code)
+    print("we've inserted the data", response.status_code)
+    registration_status_code = response.status_code
+    return registration_status_code
 
 
 def hex_translator(hex_code):
