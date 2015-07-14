@@ -50,7 +50,6 @@ def extract_data(rows):
         count += 2
 
     orig_name = rows["remainder_name"] + rows["reverse_name"][::-1]
-    print("orig_name: ", orig_name)
     name_list = []
     for items in hex_codes:
         punc, pos = hex_translator(items)
@@ -63,7 +62,7 @@ def extract_data(rows):
     surname_pos = full_name.index('*')
     forenames = full_name[:surname_pos]
     surname = full_name[surname_pos + 1:]
-    print(forenames, surname)
+    forenames = forenames.split()
 
     registration = {
         "key_number": "2244095",
@@ -71,7 +70,7 @@ def extract_data(rows):
         "application_ref": " ",
         "date": rows['registration_date'],
         "debtor_name": {
-            "forenames": [forenames],
+            "forenames": forenames,
             "surname": surname
         },
         "debtor_alternative_name": [],
@@ -96,7 +95,6 @@ def insert_data(registration):
     headers = {'Content-Type': 'application/json'}
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
 
-    print("we've inserted the data", response.status_code)
     registration_status_code = response.status_code
     return registration_status_code
 
