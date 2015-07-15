@@ -7,26 +7,20 @@ import requests
 
 @app.route('/', methods=["GET"])
 def index():
-    print("migrator called")
     return Response(status=200)
 
 
 @app.route('/begin', methods=["POST"])
 def start_migration():
-    print("start_migration called")
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
     url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
-    print(url)
     headers = {'Content-Type': 'application/json'}
-    print("calling legacy url")
     response = requests.get(url, headers=headers)
 
-    print(response.status_code)
     if response.status_code == 200:
         data = response.json()
-        print(data)
         for rows in data:
             registration = extract_data(rows)
             registration_status_code = insert_data(registration)
@@ -59,10 +53,16 @@ def extract_data(rows):
 
     name_list.append(orig_name)
     full_name = ''.join(name_list)
-    surname_pos = full_name.index('*')
-    forenames = full_name[:surname_pos]
-    surname = full_name[surname_pos + 1:]
+    try:
+        surname_pos = full_name.index('*')
+        forenames = full_name[:surname_pos]
+        surname = full_name[surname_pos + 1:]
+    except ValueError:
+        surname = ""
+        forenames = full_name
+
     forenames = forenames.split()
+    addresses = extract_address(rows['address'])
 
     registration = {
         "key_number": "2244095",
@@ -75,13 +75,7 @@ def extract_data(rows):
         },
         "debtor_alternative_name": [],
         "occupation": rows['occupation'],
-        "residence": [{
-            "address_lines": [
-                rows['address']
-            ],
-            "postcode": " "
-            }
-        ],
+        "residence": addresses,
         "residence_withheld": False,
         "date_of_birth": "1975-10-07",
         "investment_property": []
@@ -107,17 +101,45 @@ def hex_translator(hex_code):
     bit_3 = bin(int_3)
     diff = compare_int & myint
     diff_bit = (bin(diff))
-    int_5 = int(diff_bit, 2)
+    dec_5 = int(diff_bit, 2)
     punctuation = {
         "0b1": " ",
         "0b10": "-",
         "0b11": "'",
         "0b100": "(",
-        "0b101": "(",
+        "0b101": ")",
         "0b110": "*",
         "0b0": "&"
     }
 
-    print("punctuation character is:", punctuation[str(bit_3)])
-    print("position in string is:", int_5)
-    return punctuation[str(bit_3)], int_5
+    return punctuation[str(bit_3)], dec_5
+
+
+def extract_address(address):
+    marker = "   "
+    address_list = []
+    address_1 = {
+        "address_lines": [],
+        "postcode": ""
+    }
+
+    try:
+        marker_pos = address.index(marker)
+    except ValueError:
+        address_1['address_lines'].insert(0, address)
+        address_list.append(address_1.copy())
+        return address_list
+
+    while marker_pos > 0:
+        address_1['address_lines'].insert(0, address[:marker_pos])
+        address = address[marker_pos + 3:]
+        address_list.append(address_1.copy())
+        address_1['address_lines'] = []
+        try:
+            marker_pos = address.index(marker)
+        except ValueError:
+            address_1['address_lines'].insert(0, address)
+            marker_pos = 0
+            address_list.append(address_1.copy())
+
+    return address_list

@@ -1,6 +1,6 @@
 import pytest
 from unittest import mock
-from application.routes import app
+from application.routes import app, extract_data, hex_translator, extract_address
 import requests
 import json
 
@@ -14,14 +14,206 @@ class FakeResponse(requests.Response):
 
     def json(self):
         # sets up the json required in the mock response
-        data = {"register_auto": True}
+        data = [
+            {
+                "time": "2014-09-02 20:01:45.504423",
+                "registration_no": "2342",
+                "priority_notice": " ",
+                "reverse_name": "HCLEWREDNAZX",
+                "property_county": 0,
+                "registration_date": "2014-12-28",
+                "class_type": "WO(B)",
+                "remainder_name": "GUYUBALDOALE",
+                "punctuation_code": "2326CA",
+                "name": " ",
+                "address": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA",
+                "occupation": "CARPENTER",
+                "counties": "",
+                "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
+                "property": "",
+                "parish_district": "",
+                "priority_notice_ref": ""
+            }
+        ]
         return data
 
 
-reg_data = '{"keynumber": 222222, "ref": "myref", "date": "16/06/2015", "forename": "John", "surname": "Watson"}'
+test_data = [
+    {
+        "input": {
+            "time": "2014-09-02 20:01:45.504423",
+            "registration_no": "2342",
+            "priority_notice": " ",
+            "reverse_name": "EERBOREDNAZX",
+            "property_county": 0,
+            "registration_date": "2014-12-28",
+            "class_type": "WO(B)",
+            "remainder_name": "GUYUBALDOALE",
+            "punctuation_code": "2326CA61",
+            "name": " ",
+            "address": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
+            "occupation": "CARPENTER",
+            "counties": "",
+            "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
+            "property": "",
+            "parish_district": "",
+            "priority_notice_ref": ""
+        },
+        "expected": {
+            "key_number": "2244095",
+            "application_type": "WO(B)",
+            "application_ref": " ",
+            "date": "2014-12-28",
+            "debtor_name": {
+                "forenames": ["GUY", "UBALDO", "ALEXZANDER"],
+                "surname": "O'BREE"
+            },
+            "debtor_alternative_name": [],
+            "occupation": "CARPENTER",
+            "residence": [
+                {
+                    "address_lines": [
+                        "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"
+                        ],
+                    "postcode": ""
+                    },
+                {
+                    "address_lines": [
+                        "23 WILLIAM PRANCE ROAD, PLYMOUTH"
+                        ],
+                    "postcode": ""
+                    }
+            ],
+            "residence_withheld": False,
+            "date_of_birth": "1975-10-07",
+            "investment_property": []
+        }
+    }, {
+        "input": {
+            "time": "2014-09-02 20:01:45.504423",
+            "registration_no": "2342",
+            "priority_notice": " ",
+            "reverse_name": "HCLEWREDNAZX",
+            "property_county": 0,
+            "registration_date": "2014-12-28",
+            "class_type": "WO(B)",
+            "remainder_name": "GUYUBALDOALE",
+            "punctuation_code": "23262A",
+            "name": " ",
+            "address": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
+            "occupation": "CARPENTER",
+            "counties": "",
+            "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
+            "property": "",
+            "parish_district": "",
+            "priority_notice_ref": ""
+        },
+        "expected": {
+            "key_number": "2244095",
+            "application_type": "WO(B)",
+            "application_ref": " ",
+            "date": "2014-12-28",
+            "debtor_name": {
+                "forenames": ["GUY", "UBALDO", "ALEXZANDER", "WELCH"],
+                "surname": ""
+            },
+            "debtor_alternative_name": [],
+            "occupation": "CARPENTER",
+            "residence": [
+                {
+                    "address_lines": [
+                        "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"
+                    ],
+                    "postcode": ""
+                },
+                {
+                    "address_lines": [
+                        "23 WILLIAM PRANCE ROAD, PLYMOUTH"
+                    ],
+                    "postcode": ""
+                }
+            ],
+            "residence_withheld": False,
+            "date_of_birth": "1975-10-07",
+            "investment_property": []
+        }
+    }
+]
+
+test_hex = [
+    {
+        "input": "10",
+        "expected": ["&", 10]
+    }, {
+        "input": "23",
+        "expected": [" ", 3]
+    }, {
+        "input": "47",
+        "expected": ["-", 7]
+    }, {
+        "input": "6A",
+        "expected": ["'", 10]
+    }, {
+        "input": "83",
+        "expected": ["(", 3]
+    }, {
+        "input": "AC",
+        "expected": [")", 12]
+    }, {
+        "input": "DB",
+        "expected": ["*", 28]
+    }
+]
+
+test_address = [
+    {
+        "input": "23 Tavistock Road, Derriford, Plymouth  PL3 9TT   45 High Street, Saltash, Cornwall   1 Road, "
+                 "Plymouth",
+        "expected": [
+            {
+                "address_lines": [
+                    "23 Tavistock Road, Derriford, Plymouth  PL3 9TT"
+                ],
+                "postcode": ""
+            },
+            {
+                "address_lines": [
+                    "45 High Street, Saltash, Cornwall"
+                ],
+                "postcode": ""
+            },
+            {
+                "address_lines": [
+                    "1 Road Plymouth"
+                ],
+                "postcode": ""
+            }
+        ]
+    }, {
+        "input": "Various addresses in  Dorsert and  Devon  which can be supplied on request",
+        "expected": [
+            {
+                "address_lines": [
+                    "Various addresses in  Dorsert and  Devon  which can be supplied on request"
+                ],
+                "postcode": ""
+            }
+        ]
+    }, {
+        "input": "23 My Road, Town Centre, Postcode City 45 Middle Road, Midtown, City",
+        "expected": [
+            {
+                "address_lines": [
+                    "23 My Road, Town Centre, Postcode City 45 Middle Road, Midtown, City"
+                ],
+                "postcode": ""
+            }
+        ]
+    }
+]
 
 
-class TestB2BProcess:
+class TestMigrationProcess:
     def setup_method(self, method):
         self.app = app.test_client()
 
@@ -36,25 +228,142 @@ class TestB2BProcess:
         response = self.app.get("/doesnt_exist")
         assert response.status_code == 404
 
-    def test_contentfail(self):
-        headers = {'Content-Type': 'text'}
-        response = self.app.post('/register', data=reg_data, headers=headers)
-        assert response.status_code == 415
-
-
-    fake_auto_success = FakeResponse('Y', 200)
+    fake_auto_success = FakeResponse(200)
+    fake_auto_fail = FakeResponse(400)
 
     @mock.patch('requests.post', return_value=fake_auto_success)
-    def test_register(self, mock_post):
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_migrate(self, mock_post, mock_get):
+        data = test_data[0]
+        extracted = extract_data(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/register', data=reg_data, headers=headers)
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
         assert response.status_code == 200
+        assert extracted['debtor_name'] == data['expected']['debtor_name']
+        assert extracted['residence'] == data['expected']['residence']
 
-    fake_manual_success = FakeResponse('N', 200)
-
-    @mock.patch('requests.post', return_value=fake_manual_success)
-    def test_register1(self, mock_post):
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_ampersand(self, mock_post, mock_get):
+        data = test_hex[0]
+        hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/register', data=reg_data, headers=headers)
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
         assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
 
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_blank(self, mock_post, mock_get):
+        data = test_hex[1]
+        hexconvert = hex_translator(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_hyphen(self, mock_post, mock_get):
+        data = test_hex[2]
+        hexconvert = hex_translator(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_apos(self, mock_post, mock_get):
+        data = test_hex[3]
+        hexconvert = hex_translator(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_lbracket(self, mock_post, mock_get):
+        data = test_hex[4]
+        hexconvert = hex_translator(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_rbracket(self, mock_post, mock_get):
+        data = test_hex[5]
+        hexconvert = hex_translator(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_hex_convertor_asterisk(self, mock_post, mock_get):
+        data = test_hex[6]
+        hexconvert = hex_translator(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert hexconvert[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_fail)
+    def test_legacy_fail(self, mock_post, mock_get):
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 400
+
+    @mock.patch('requests.post', return_value=fake_auto_fail)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_register_fail(self, mock_post, mock_get):
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 400
+
+    # test that multiple addresses supplied with 3 blank separation format correctly
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_3_addresses(self, mock_post, mock_get):
+        data = test_address[0]
+        extracted = extract_address(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert extracted[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_address_2_blanks(self, mock_post, mock_get):
+        data = test_address[1]
+        extracted = extract_address(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert extracted[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_addresses_string(self, mock_post, mock_get):
+        data = test_address[2]
+        extracted = extract_address(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert extracted[0] == data['expected'][0]
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_no_surname(self, mock_post, mock_get):
+        data = test_data[1]
+        extracted = extract_data(data['input'])
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        assert response.status_code == 200
+        assert extracted['debtor_name'] == data['expected']['debtor_name']
+        assert extracted['residence'] == data['expected']['residence']
