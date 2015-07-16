@@ -28,8 +28,6 @@ def start_migration():
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
-                """logging.error("Received " + str(registration_status_code))
-                return Response(status=registration_status_code)"""
                 process_error("Register Database", registration_status_code, rows, registration)
                 error = True
     else:
@@ -43,8 +41,8 @@ def start_migration():
                 error_list.append(message_read)
             except Exception:
                 break
-        print(error_list)
-        return Response(json.dumps(error_list), status=202, mimetype='application/json')
+        data = json.dumps(error_list, ensure_ascii=False)
+        return Response(data, status=202, mimetype='application/json')
     else:
         return Response(status=200, mimetype='application/json')
 
@@ -103,8 +101,9 @@ def insert_data(registration):
     headers = {'Content-Type': 'application/json'}
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
 
-    # registration_status_code = response.status_code
-    registration_status_code = 500
+    registration_status_code = response.status_code
+    """ add code below to force errors
+    registration_status_code = 500 """
     return registration_status_code
 
 
