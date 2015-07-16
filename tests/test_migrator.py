@@ -60,33 +60,30 @@ test_data = [
             "priority_notice_ref": ""
         },
         "expected": {
-            "key_number": "2244095",
             "application_type": "WO(B)",
-            "application_ref": " ",
+            "application_ref": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
             "date": "2014-12-28",
             "debtor_name": {
                 "forenames": ["GUY", "UBALDO", "ALEXZANDER"],
                 "surname": "O'BREE"
             },
-            "debtor_alternative_name": [],
-            "occupation": "CARPENTER",
+            "occupation": "",
             "residence": [
-                {
-                    "address_lines": [
-                        "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"
-                        ],
-                    "postcode": ""
-                    },
-                {
-                    "address_lines": [
-                        "23 WILLIAM PRANCE ROAD, PLYMOUTH"
-                        ],
-                    "postcode": ""
-                    }
+                {"text": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"},
+                {"text": "23 WILLIAM PRANCE ROAD, PLYMOUTH"}
             ],
-            "residence_withheld": False,
-            "date_of_birth": "1975-10-07",
-            "investment_property": []
+            "migration_data": {
+                "registration_no": "2342",
+                "extra": {
+                    "occupation": "CARPENTER",
+                    "of_note": {
+                        "counties": "",
+                        "property": "",
+                        "parish_district": "",
+                        "priority_notice_ref": ""
+                    },
+                }
+            }
         }
     }, {
         "input": {
@@ -109,33 +106,30 @@ test_data = [
             "priority_notice_ref": ""
         },
         "expected": {
-            "key_number": "2244095",
             "application_type": "WO(B)",
-            "application_ref": " ",
+            "application_ref": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
             "date": "2014-12-28",
             "debtor_name": {
                 "forenames": ["GUY", "UBALDO", "ALEXZANDER", "WELCH"],
                 "surname": ""
             },
-            "debtor_alternative_name": [],
-            "occupation": "CARPENTER",
+            "occupation": "",
             "residence": [
-                {
-                    "address_lines": [
-                        "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"
-                    ],
-                    "postcode": ""
-                },
-                {
-                    "address_lines": [
-                        "23 WILLIAM PRANCE ROAD, PLYMOUTH"
-                    ],
-                    "postcode": ""
-                }
+                {"text": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"},
+                {"text": "23 WILLIAM PRANCE ROAD, PLYMOUTH"}
             ],
-            "residence_withheld": False,
-            "date_of_birth": "1975-10-07",
-            "investment_property": []
+            "migration_data": {
+                "registration_no": "2342",
+                "extra": {
+                    "occupation": "CARPENTER",
+                    "of_note": {
+                        "counties": "",
+                        "property": "",
+                        "parish_district": "",
+                        "priority_notice_ref": ""
+                    },
+                }
+            }
         }
     }
 ]
@@ -170,44 +164,19 @@ test_address = [
         "input": "23 Tavistock Road, Derriford, Plymouth  PL3 9TT   45 High Street, Saltash, Cornwall   1 Road, "
                  "Plymouth",
         "expected": [
-            {
-                "address_lines": [
-                    "23 Tavistock Road, Derriford, Plymouth  PL3 9TT"
-                ],
-                "postcode": ""
-            },
-            {
-                "address_lines": [
-                    "45 High Street, Saltash, Cornwall"
-                ],
-                "postcode": ""
-            },
-            {
-                "address_lines": [
-                    "1 Road Plymouth"
-                ],
-                "postcode": ""
-            }
+            {"text": "23 Tavistock Road, Derriford, Plymouth  PL3 9TT"},
+            {"text": "45 High Street, Saltash, Cornwall"},
+            {"text": "1 Road Plymouth"}
         ]
     }, {
         "input": "Various addresses in  Dorsert and  Devon  which can be supplied on request",
         "expected": [
-            {
-                "address_lines": [
-                    "Various addresses in  Dorsert and  Devon  which can be supplied on request"
-                ],
-                "postcode": ""
-            }
+            {"text": "Various addresses in  Dorsert and  Devon  which can be supplied on request"}
         ]
     }, {
         "input": "23 My Road, Town Centre, Postcode City 45 Middle Road, Midtown, City",
         "expected": [
-            {
-                "address_lines": [
-                    "23 My Road, Town Centre, Postcode City 45 Middle Road, Midtown, City"
-                ],
-                "postcode": ""
-            }
+            {"text": "23 My Road, Town Centre, Postcode City 45 Middle Road, Midtown, City"}
         ]
     }
 ]
@@ -324,7 +293,7 @@ class TestMigrationProcess:
     def test_register_fail(self, mock_post, mock_get):
         headers = {'Content-Type': 'application/json'}
         response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
-        assert response.status_code == 400
+        assert response.status_code == 202
 
     # test that multiple addresses supplied with 3 blank separation format correctly
     @mock.patch('requests.post', return_value=fake_auto_success)
