@@ -44,7 +44,7 @@ def start_migration():
             except Exception:
                 break
         print(error_list)
-        return Response(status=200, mimetype='application/json')
+        return Response(json.dumps(error_list), status=202, mimetype='application/json')
     else:
         return Response(status=200, mimetype='application/json')
 
