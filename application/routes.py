@@ -1,4 +1,4 @@
-from application import app
+from application import app, error_queue
 from flask import Response, request
 import json
 import logging
@@ -12,6 +12,8 @@ def index():
 
 @app.route('/begin', methods=["POST"])
 def start_migration():
+    error_list = []
+    error = False
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
@@ -26,13 +28,25 @@ def start_migration():
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
-                logging.error("Received " + str(registration_status_code))
-                return Response(status=registration_status_code)
+                """logging.error("Received " + str(registration_status_code))
+                return Response(status=registration_status_code)"""
+                process_error("Register Database", registration_status_code, rows, registration)
+                error = True
     else:
         logging.error("Received " + str(response.status_code))
         return Response(status=response.status_code)
 
-    return Response(status=200, mimetype='application/json')
+    if error is True:
+        while True:
+            try:
+                message_read = error_queue.read_error()
+                error_list.append(message_read)
+            except Exception:
+                break
+        print(error_list)
+        return Response(status=200, mimetype='application/json')
+    else:
+        return Response(status=200, mimetype='application/json')
 
 
 def extract_data(rows):
@@ -89,7 +103,8 @@ def insert_data(registration):
     headers = {'Content-Type': 'application/json'}
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
 
-    registration_status_code = response.status_code
+    # registration_status_code = response.status_code
+    registration_status_code = 500
     return registration_status_code
 
 
@@ -143,3 +158,18 @@ def extract_address(address):
             address_list.append(address_1.copy())
 
     return address_list
+
+
+def process_error(db, status_code, rows, registration):
+    error_detail = {
+        "registration_no": rows['registration_no'],
+        "legacy_name": rows['reverse_name'],
+        "legacy_rem_name": rows['remainder_name'],
+        "legacy_punc_code": rows['punctuation_code'],
+        "class": rows['class_type'],
+        "register_name": registration['debtor_name']
+        }
+
+    error_message = "Call to " + db + " with code " + str(status_code) + ". Details: " + str(error_detail)
+    error_queue.write_error(error_message)
+    return
