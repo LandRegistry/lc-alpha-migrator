@@ -77,27 +77,34 @@ def extract_data(rows):
     addresses = extract_address(rows['address'])
 
     registration = {
-        "key_number": "2244095",
         "application_type": rows['class_type'],
-        "application_ref": " ",
+        "application_ref": rows['amendment_info'],
         "date": rows['registration_date'],
         "debtor_name": {
             "forenames": forenames,
             "surname": surname
         },
-        "debtor_alternative_name": [],
-        "occupation": rows['occupation'],
+        "occupation": "",
         "residence": addresses,
-        "residence_withheld": False,
-        "date_of_birth": "1975-10-07",
-        "investment_property": []
+        "migration_data": {
+            "registration_no": rows['registration_no'],
+            "extra": {
+                "occupation": rows['occupation'],
+                "of_note": {
+                    "counties": rows['counties'],
+                    "property": rows['property'],
+                    "parish_district": rows['parish_district'],
+                    "priority_notice_ref": rows['priority_notice_ref']
+                },
+            }
+        }
     }
     return registration
 
 
 def insert_data(registration):
     json_data = registration
-    url = app.config['BANKRUPTCY_DATABASE_API'] + '/register'
+    url = app.config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
 
@@ -133,29 +140,26 @@ def extract_address(address):
     marker = "   "
     address_list = []
     address_1 = {
-        "address_lines": [],
-        "postcode": ""
+        "text": ""
     }
 
     try:
         marker_pos = address.index(marker)
     except ValueError:
-        address_1['address_lines'].insert(0, address)
+        address_1['text'] = address
         address_list.append(address_1.copy())
         return address_list
 
     while marker_pos > 0:
-        address_1['address_lines'].insert(0, address[:marker_pos])
+        address_1['text'] = address[:marker_pos]
         address = address[marker_pos + 3:]
         address_list.append(address_1.copy())
-        address_1['address_lines'] = []
         try:
             marker_pos = address.index(marker)
         except ValueError:
-            address_1['address_lines'].insert(0, address)
+            address_1['text'] = address
             marker_pos = 0
             address_list.append(address_1.copy())
-
     return address_list
 
 
