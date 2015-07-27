@@ -35,16 +35,27 @@ def start_migration():
         return Response(status=response.status_code)
 
     if error is True:
-        while True:
-            try:
-                message_read = error_queue.read_error()
-                error_list.append(message_read)
-            except Exception:
-                break
-        data = json.dumps(error_list, ensure_ascii=False)
-        return Response(data, status=202, mimetype='application/json')
+        return Response(status=500, mimetype='application/json')
     else:
         return Response(status=200, mimetype='application/json')
+
+
+# For testing error queueing:
+@app.route('/force_error', methods=['POST'])
+def force_error():
+    data = request.get_json(force=True)
+    row = {
+        "registration_no": data['registration_no'],
+        "reverse_name": data['reverse_name'],
+        "remainder_name": data['remainder_name'],
+        "punctuation_code": data['punctuation_code'],
+        "class_type": data['class_type']
+    }
+    registration = {
+        "debtor_name": data['debtor_name']
+    }
+    process_error("Test Errors", "500", row, registration)
+    return Response(status=200)
 
 
 def extract_data(rows):
@@ -173,6 +184,5 @@ def process_error(db, status_code, rows, registration):
         "register_name": registration['debtor_name']
         }
 
-    error_message = "Call to " + db + " with code " + str(status_code) + ". Details: " + str(error_detail)
-    error_queue.write_error(error_message)
+    error_queue.write_error(error_detail)
     return
