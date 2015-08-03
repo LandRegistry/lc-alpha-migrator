@@ -35,7 +35,7 @@ def start_migration():
         return Response(status=response.status_code)
 
     if error is True:
-        return Response(status=500, mimetype='application/json')
+        return Response(status=202, mimetype='application/json')
     else:
         return Response(status=200, mimetype='application/json')
 
