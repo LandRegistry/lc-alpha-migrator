@@ -17,6 +17,7 @@ def start_migration():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
+    logging.info('Logging invoked: {} to {}'.format(start_date, end_date))
     url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
     headers = {'Content-Type': 'application/json'}
     response = requests.get(url, headers=headers)
@@ -28,6 +29,7 @@ def start_migration():
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
+                logging.error("Migration error: {} {} {}".format(registration_status_code, rows, registration))
                 process_error("Register Database", registration_status_code, rows, registration)
                 error = True
     else:
