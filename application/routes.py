@@ -12,7 +12,6 @@ def index():
 
 @app.route('/begin', methods=["POST"])
 def start_migration():
-    error_list = []
     error = False
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
@@ -65,7 +64,7 @@ def extract_data(rows):
     length = len(rows['punctuation_code'])
     count = 0
     while count < length:
-        hex_codes.append(rows['punctuation_code'][count:(count+2)])
+        hex_codes.append(rows['punctuation_code'][count:(count + 2)])
         count += 2
 
     orig_name = rows["remainder_name"] + rows["reverse_name"][::-1]
@@ -184,7 +183,7 @@ def process_error(db, status_code, rows, registration):
         "legacy_punc_code": rows['punctuation_code'],
         "class": rows['class_type'],
         "register_name": registration['debtor_name']
-        }
+    }
 
     error_queue.write_error(error_detail)
     return

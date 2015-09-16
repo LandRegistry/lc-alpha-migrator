@@ -7,4 +7,3 @@ def write_error(message):
         error_queue.put(message)
         print('Sent: %s' % message)
         error_queue.close()
-
