@@ -16,7 +16,7 @@ def start_migration():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
 
-    logging.info('Logging invoked: {} to {}'.format(start_date, end_date))
+    logging.info('Logging invoked: %s to %s', start_date, end_date)
     url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
     headers = {'Content-Type': 'application/json'}
     response = requests.get(url, headers=headers)
@@ -28,7 +28,7 @@ def start_migration():
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
-                logging.error("Migration error: {} {} {}".format(registration_status_code, rows, registration))
+                logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
                 process_error("Register Database", registration_status_code, rows, registration)
                 error = True
     else:
@@ -121,8 +121,8 @@ def insert_data(registration):
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
 
     registration_status_code = response.status_code
-    """ add code below to force errors
-    registration_status_code = 500 """
+    # add code below to force errors
+    # registration_status_code = 500
     return registration_status_code
 
 
@@ -175,8 +175,10 @@ def extract_address(address):
     return address_list
 
 
-def process_error(db, status_code, rows, registration):
+def process_error(database, status_code, rows, registration):
     error_detail = {
+        "database": database,
+        "status": status_code,
         "registration_no": rows['registration_no'],
         "legacy_name": rows['reverse_name'],
         "legacy_rem_name": rows['remainder_name'],
