@@ -3,6 +3,8 @@ from flask import Response, request
 import json
 import logging
 import requests
+import operator
+from datetime import datetime
 
 
 @app.route('/', methods=["GET"])
@@ -13,24 +15,111 @@ def index():
 @app.route('/begin', methods=["POST"])
 def start_migration():
     error = False
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
+    # start_date = request.args.get('start_date')
+    # end_date = request.args.get('end_date')
 
-    logging.info('Logging invoked: %s to %s', start_date, end_date)
-    url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
+    logging.info('Logging invoked: migration started')
+    # url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
+
+    # Get all the registration numbers that need to be migrated. These include cancelled registrations
+    # so that a history can be kept.
+    """
+    url = app.config['B2B_LEGACY_URL'] + '/land_charge'
     headers = {'Content-Type': 'application/json'}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers)"""
 
-    if response.status_code == 200:
-        data = response.json()
+    # TODO: remove line of code below
+    status_code = 200
+    # if response.status_code == 200:
+    if status_code == 200:
+        """data = response.json()
         for rows in data:
+            # For each registration number returned, get history of that application.
+            url = app.config['B2B_LEGACY_URL'] + '/endt????'  # TODO: how to pass in reg number,class of charge and date
+            headers = {'Content-Type': 'application/json'}
+            response = requests.get(url, headers=headers)
+            history = response.json()  """
+        history = [
+            {"lc_class": "C1",
+             "lc_reg_no": "19954",
+             "lc_reg_date": "05.01.2013",
+             "lc_class_orig": "C1",
+             "lc_reg_no_orig": "18800",
+             "lc_reg_date_orig": "01.01.2012",
+             "canc_reg_ind": " ",
+             "lc_appn_type": "AM",
+             "lc_doc_qual_ind": " ",
+             "lc_doc_time_stamp": "2013-01-05-11.07.55.375488",
+             "lc_image_scan_date": "05.01.2013",
+             "lc_image_scan_time": "11.07.55",
+             "lc_dum_page_ind": " "},
+            {"lc_class": "C1",
+             "lc_reg_no": "19988",
+             "lc_reg_date": "11.09.2012",
+             "lc_class_orig": "C1",
+             "lc_reg_no_orig": "18800",
+             "lc_reg_date_orig": "01.01.2012",
+             "canc_reg_ind": " ",
+             "lc_appn_type": "AM",
+             "lc_doc_qual_ind": " ",
+             "lc_doc_time_stamp": "2013-01-05-11.07.55.375488",
+             "lc_image_scan_date": "05.01.2013",
+             "lc_image_scan_time": "11.07.55",
+             "lc_dum_page_ind": " "},
+            {"lc_class": "C1",
+             "lc_reg_no": "19981",
+             "lc_reg_date": "11.09.2012",
+             "lc_class_orig": "C1",
+             "lc_reg_no_orig": "18800",
+             "lc_reg_date_orig": "01.01.2012",
+             "canc_reg_ind": " ",
+             "lc_appn_type": "AM",
+             "lc_doc_qual_ind": " ",
+             "lc_doc_time_stamp": "2013-01-05-11.07.55.375488",
+             "lc_image_scan_date": "05.01.2013",
+             "lc_image_scan_time": "11.07.55",
+             "lc_dum_page_ind": " "}
+        ]
+        print(history)
+        for i in history:
+            print(i['lc_reg_date'])
+            i['lc_reg_date'] = datetime.strptime(i['lc_reg_date'], '%d.%m.%Y').date()
+            i['lc_reg_no'] = int(i['lc_reg_no'])
+
+        print(history[0]['lc_reg_date'], history[0]['lc_reg_no'])
+        print(type(history[0]['lc_reg_date']), type(history[0]['lc_reg_no']))
+
+        history.sort(key=operator.itemgetter('lc_reg_date', 'lc_reg_no'))
+        print(history)
+
+        registration = extract_data(rows)
+        register_data = {"original_registration": registration,
+                         "history": []}
+        for registers in history:
+            history_data = {"reg_no": registers['lc_reg_no'],
+                            "class": registers['lc_class'],
+                            "date": registers['lc_reg_date']
+                            }
+            url = app.config['B2B_LEGACY_URL'] + '/land_charge'  # TODO: what will be called to get t_land_charge row
+            headers = {'Content-Type': 'application/json'}
+            response = requests.get(url, headers=headers, data=history_data)
+            register_data['history'].append(extract_data(response.json()))
+
+        registration_status_code = insert_data(register_data)
+
+        if registration_status_code != 200:
+            logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
+            process_error("Register Database", registration_status_code, rows, registration)
+            error = True
+
+        """
             registration = extract_data(rows)
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
                 logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
                 process_error("Register Database", registration_status_code, rows, registration)
-                error = True
+                error = True"""
     else:
         logging.error("Received " + str(response.status_code))
         return Response(status=response.status_code)
