@@ -21,19 +21,18 @@ def start_migration():
     # so that a history can be kept.
     url = app.config['B2B_LEGACY_URL'] + '/land_charges'
     headers = {'Content-Type': 'application/json'}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, params={'type': 'NR'})
 
     if response.status_code == 200:
         data = response.json()
+        print('number of rows to process: ', len(data))
+
         for rows in data:
             # For each registration number returned, get history of that application.
             url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + rows['reg_no']
             headers = {'Content-Type': 'application/json'}
             response = requests.get(url, headers=headers, params={'class': rows['class'], 'date': rows['date']})
 
-            """url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + '604455'
-            headers = {'Content-Type': 'application/json'}
-            response = requests.get(url, headers=headers, params={'class': 'PA(B)', 'date': '2011-06-12'})"""
             history = response.json()
             # print('history is: ', history)
 
@@ -46,24 +45,26 @@ def start_migration():
             registration = []
             for registers in history:
                 # print('registers is: ', registers)
+                registers['class'] = convert_class(registers['class'])
                 url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(registers['reg_no'])
                 headers = {'Content-Type': 'application/json'}
                 response = requests.get(url, headers=headers,
                                         params={'class': registers['class'], 'date': registers['date']})
                 if response.status_code == 200:
-                    print('response.json', response.json())
-                    registration.append(extract_data(response.json()))
+                    registration.append(extract_data(response.json(), registers['type']))
                 elif response.status_code != 404:
                     print('error!!', response.status_code)
                 else:
                     print('no row found for:', str(registers['reg_no']))
+                    del registers['sorted_date']
+                    registration.append(registers)
 
             # print('register_data', registration)
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
-                logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
-                # TODO: process_error("Register Database", registration_status_code, rows, registration)
+                # logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
+                # process_error("Register Database", registration_status_code, rows, registration)
                 error = True
 
         """
@@ -102,32 +103,21 @@ def force_error():
     return Response(status=200)
 
 
-def extract_data(rows):
+def extract_data(rows, app_type):
     data=rows[0]
     # determine the type of extraction needed - simple name/complex name/local authority
     # print('reverse_name', data['reverse_name'])
     if data['reverse_name'][0:2] == 'F9':
-        print('we had a complex name', data)
-        registration = extract_complex(data)
+        print('we had a complex name', data['reverse_name'])
+        registration = build_registration(data, None, None, data['name'])
+        # add complex number - this is held in hex form in the 2nd, 3rd and 4th characters of the reverse name
+        registration['complex_number'] = int(data['reverse_name'][2:8], 16)
     elif data['name'] != "":
-        registration = extract_authority(data)
+        registration = build_registration(data, None, None, data['name'])
     else:
         registration = extract_simple(data)
 
-    return registration
-
-
-def extract_complex(rows):
-    registration = build_registration(rows, None, None, rows['name'])
-    # add complex number - this is held in hex form in the 2nd, 3rd and 4th characters of the reverse name
-    registration['complex_number'] = int(rows['reverse_name'][2:8], 16)
-
-    return registration
-
-
-def extract_authority(rows):
-    print('we are a local authority', rows)
-    registration = build_registration(rows, None, None, rows['name'])
+    registration['type'] = app_type
     return registration
 
 
@@ -165,7 +155,7 @@ def extract_simple(rows):
 
 def build_registration(rows, forenames=None, surname=None, name_string=None):
     if name_string is None:
-        name_string = forenames + ' ' + surname
+        name_string = ' '.join(str(x) for x in forenames) + ' ' + surname
     else:
         forenames = ""
         surname = ""
@@ -230,6 +220,24 @@ def hex_translator(hex_code):
     }
 
     return punctuation[str(bit_3)], dec_5
+
+
+def convert_class(class_of_charge):
+    charge = {
+        "C1": "C(I)",
+        "C2": "C(II)",
+        "C3": "C(III)",
+        "C4": "C(IV)",
+        "D1": "D(I)",
+        "D2": "D(II)",
+        "D3": "D(III)",
+        "PAB": "PA(B)",
+        "WOB": "WO(B)"
+    }
+    if class_of_charge in charge:
+        return charge.get(class_of_charge)
+    else:
+        return class_of_charge
 
 
 def extract_address(address):
