@@ -15,102 +15,56 @@ def index():
 @app.route('/begin', methods=["POST"])
 def start_migration():
     error = False
-    # start_date = request.args.get('start_date')
-    # end_date = request.args.get('end_date')
-
     logging.info('Logging invoked: migration started')
-    # url = app.config['B2B_LEGACY_URL'] + '/land_charge?' + 'start_date=' + start_date + '&' + 'end_date=' + end_date
 
     # Get all the registration numbers that need to be migrated. These include cancelled registrations
     # so that a history can be kept.
-    """
-    url = app.config['B2B_LEGACY_URL'] + '/land_charge'
+    url = app.config['B2B_LEGACY_URL'] + '/land_charges'
     headers = {'Content-Type': 'application/json'}
-    response = requests.get(url, headers=headers)"""
+    response = requests.get(url, headers=headers)
 
-    # TODO: remove line of code below
-    status_code = 200
-    # if response.status_code == 200:
-    if status_code == 200:
-        """data = response.json()
+    if response.status_code == 200:
+        data = response.json()
         for rows in data:
             # For each registration number returned, get history of that application.
-            url = app.config['B2B_LEGACY_URL'] + '/endt????'  # TODO: how to pass in reg number,class of charge and date
+            url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + rows['reg_no']
             headers = {'Content-Type': 'application/json'}
-            response = requests.get(url, headers=headers)
-            history = response.json()  """
-        history = [
-            {"lc_class": "C1",
-             "lc_reg_no": "19954",
-             "lc_reg_date": "05.01.2013",
-             "lc_class_orig": "C1",
-             "lc_reg_no_orig": "18800",
-             "lc_reg_date_orig": "01.01.2012",
-             "canc_reg_ind": " ",
-             "lc_appn_type": "AM",
-             "lc_doc_qual_ind": " ",
-             "lc_doc_time_stamp": "2013-01-05-11.07.55.375488",
-             "lc_image_scan_date": "05.01.2013",
-             "lc_image_scan_time": "11.07.55",
-             "lc_dum_page_ind": " "},
-            {"lc_class": "C1",
-             "lc_reg_no": "19988",
-             "lc_reg_date": "11.09.2012",
-             "lc_class_orig": "C1",
-             "lc_reg_no_orig": "18800",
-             "lc_reg_date_orig": "01.01.2012",
-             "canc_reg_ind": " ",
-             "lc_appn_type": "AM",
-             "lc_doc_qual_ind": " ",
-             "lc_doc_time_stamp": "2013-01-05-11.07.55.375488",
-             "lc_image_scan_date": "05.01.2013",
-             "lc_image_scan_time": "11.07.55",
-             "lc_dum_page_ind": " "},
-            {"lc_class": "C1",
-             "lc_reg_no": "19981",
-             "lc_reg_date": "11.09.2012",
-             "lc_class_orig": "C1",
-             "lc_reg_no_orig": "18800",
-             "lc_reg_date_orig": "01.01.2012",
-             "canc_reg_ind": " ",
-             "lc_appn_type": "AM",
-             "lc_doc_qual_ind": " ",
-             "lc_doc_time_stamp": "2013-01-05-11.07.55.375488",
-             "lc_image_scan_date": "05.01.2013",
-             "lc_image_scan_time": "11.07.55",
-             "lc_dum_page_ind": " "}
-        ]
-        print(history)
-        for i in history:
-            print(i['lc_reg_date'])
-            i['lc_reg_date'] = datetime.strptime(i['lc_reg_date'], '%d.%m.%Y').date()
-            i['lc_reg_no'] = int(i['lc_reg_no'])
+            response = requests.get(url, headers=headers, params={'class': rows['class'], 'date': rows['date']})
 
-        print(history[0]['lc_reg_date'], history[0]['lc_reg_no'])
-        print(type(history[0]['lc_reg_date']), type(history[0]['lc_reg_no']))
-
-        history.sort(key=operator.itemgetter('lc_reg_date', 'lc_reg_no'))
-        print(history)
-
-        registration = extract_data(rows)
-        register_data = {"original_registration": registration,
-                         "history": []}
-        for registers in history:
-            history_data = {"reg_no": registers['lc_reg_no'],
-                            "class": registers['lc_class'],
-                            "date": registers['lc_reg_date']
-                            }
-            url = app.config['B2B_LEGACY_URL'] + '/land_charge'  # TODO: what will be called to get t_land_charge row
+            """url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + '604455'
             headers = {'Content-Type': 'application/json'}
-            response = requests.get(url, headers=headers, data=history_data)
-            register_data['history'].append(extract_data(response.json()))
+            response = requests.get(url, headers=headers, params={'class': 'PA(B)', 'date': '2011-06-12'})"""
+            history = response.json()
+            # print('history is: ', history)
 
-        registration_status_code = insert_data(register_data)
+            for i in history:
+                i['sorted_date'] = datetime.strptime(i['date'], '%Y-%m-%d').date()
+                i['reg_no'] = int(i['reg_no'])
 
-        if registration_status_code != 200:
-            logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
-            process_error("Register Database", registration_status_code, rows, registration)
-            error = True
+            history.sort(key=operator.itemgetter('sorted_date', 'reg_no'))
+            # print(history)
+            registration = []
+            for registers in history:
+                # print('registers is: ', registers)
+                url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(registers['reg_no'])
+                headers = {'Content-Type': 'application/json'}
+                response = requests.get(url, headers=headers,
+                                        params={'class': registers['class'], 'date': registers['date']})
+                if response.status_code == 200:
+                    print('response.json', response.json())
+                    registration.append(extract_data(response.json()))
+                elif response.status_code != 404:
+                    print('error!!', response.status_code)
+                else:
+                    print('no row found for:', str(registers['reg_no']))
+
+            # print('register_data', registration)
+            registration_status_code = insert_data(registration)
+
+            if registration_status_code != 200:
+                logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
+                # TODO: process_error("Register Database", registration_status_code, rows, registration)
+                error = True
 
         """
             registration = extract_data(rows)
@@ -149,6 +103,35 @@ def force_error():
 
 
 def extract_data(rows):
+    data=rows[0]
+    # determine the type of extraction needed - simple name/complex name/local authority
+    # print('reverse_name', data['reverse_name'])
+    if data['reverse_name'][0:2] == 'F9':
+        print('we had a complex name', data)
+        registration = extract_complex(data)
+    elif data['name'] != "":
+        registration = extract_authority(data)
+    else:
+        registration = extract_simple(data)
+
+    return registration
+
+
+def extract_complex(rows):
+    registration = build_registration(rows, None, None, rows['name'])
+    # add complex number - this is held in hex form in the 2nd, 3rd and 4th characters of the reverse name
+    registration['complex_number'] = int(rows['reverse_name'][2:8], 16)
+
+    return registration
+
+
+def extract_authority(rows):
+    print('we are a local authority', rows)
+    registration = build_registration(rows, None, None, rows['name'])
+    return registration
+
+
+def extract_simple(rows):
     hex_codes = []
     length = len(rows['punctuation_code'])
     count = 0
@@ -175,7 +158,17 @@ def extract_data(rows):
         forenames = full_name
 
     forenames = forenames.split()
-    addresses = extract_address(rows['address'])
+
+    registration = build_registration(rows, forenames, surname)
+    return registration
+
+
+def build_registration(rows, forenames=None, surname=None, name_string=None):
+    if name_string is None:
+        name_string = forenames + ' ' + surname
+    else:
+        forenames = ""
+        surname = ""
 
     registration = {
         "application_type": rows['class_type'],
@@ -183,10 +176,11 @@ def extract_data(rows):
         "date": rows['registration_date'],
         "debtor_name": {
             "forenames": forenames,
-            "surname": surname
+            "surname": surname,
+            "name_string": name_string
         },
         "occupation": "",
-        "residence": addresses,
+        "residence": rows['address'],
         "migration_data": {
             "registration_no": rows['registration_no'],
             "extra": {
@@ -197,13 +191,14 @@ def extract_data(rows):
                     "parish_district": rows['parish_district'],
                     "priority_notice_ref": rows['priority_notice_ref']
                 },
-            }
+                }
         }
     }
     return registration
 
 
 def insert_data(registration):
+    print('registration = ', registration)
     json_data = registration
     url = app.config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
