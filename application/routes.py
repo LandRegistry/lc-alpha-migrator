@@ -17,34 +17,32 @@ def start_migration():
     error = False
     logging.info('Logging invoked: migration started')
 
-    # Get all the registration numbers that need to be migrated. These include cancelled registrations
-    # so that a history can be kept.
+    # Get all the registration numbers that need to be migrated
     url = app.config['B2B_LEGACY_URL'] + '/land_charges'
     headers = {'Content-Type': 'application/json'}
     response = requests.get(url, headers=headers, params={'type': 'NR'})
 
     if response.status_code == 200:
-        data = response.json()
-        print('number of rows to process: ', len(data))
+        reg_data = response.json()
+        total_read = len(reg_data)
+        total_inc_history = 0
 
-        for rows in data:
+        for rows in reg_data:
             # For each registration number returned, get history of that application.
             url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + rows['reg_no']
             headers = {'Content-Type': 'application/json'}
             response = requests.get(url, headers=headers, params={'class': rows['class'], 'date': rows['date']})
 
             history = response.json()
-            # print('history is: ', history)
+            total_inc_history += len(history)
 
             for i in history:
                 i['sorted_date'] = datetime.strptime(i['date'], '%Y-%m-%d').date()
                 i['reg_no'] = int(i['reg_no'])
 
             history.sort(key=operator.itemgetter('sorted_date', 'reg_no'))
-            # print(history)
             registration = []
             for x, registers in enumerate(history):
-                # print('registers is: ', registers)
                 registers['class'] = convert_class(registers['class'])
                 url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(registers['reg_no'])
                 headers = {'Content-Type': 'application/json'}
@@ -56,38 +54,31 @@ def start_migration():
                 elif response.status_code != 404:
                     print('error!!', response.status_code)
                 else:
-                    print('no row found for:', str(registers['reg_no']))
                     del registers['sorted_date']
                     registers['application_type'] = registers['class']
                     registers['application_ref'] = ' '
                     registers['migration_data'] = {"registration_no": registers['reg_no'],
                                                    "extra": {}}
+                    registers['residence'] = {"text": ""}
                     registration.append(registers)
 
-            # print('register_data', registration)
-            registration_status_code = insert_data(registration)
-
-            if registration_status_code != 200:
-                # logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
-                # process_error("Register Database", registration_status_code, rows, registration)
-                error = True
-
-        """
-            registration = extract_data(rows)
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
                 logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
                 process_error("Register Database", registration_status_code, rows, registration)
-                error = True"""
+                error = True
+
     else:
         logging.error("Received " + str(response.status_code))
         return Response(status=response.status_code)
 
+    message = {"total NR records read": total_read,
+               "total records processed including history": total_inc_history}
     if error is True:
-        return Response(status=202, mimetype='application/json')
+        return Response(json.dumps(message), status=202, mimetype='application/json')
     else:
-        return Response(status=200, mimetype='application/json')
+        return Response(json.dumps(message), status=200, mimetype='application/json')
 
 
 # For testing error queueing:
@@ -109,15 +100,12 @@ def force_error():
 
 
 def extract_data(rows, app_type):
-    data=rows[0]
+    data = rows[0]
     # determine the type of extraction needed - simple name/complex name/local authority
-    # print('reverse_name', data['reverse_name'])
     if data['reverse_name'][0:2] == 'F9':
         print('we had a complex name', data['reverse_name'])
         registration = build_registration(data, None, None, {'name': data['name'],
                                                              'number': int(data['reverse_name'][2:8], 16)})
-        # add complex number - this is held in hex form in the 2nd, 3rd and 4th characters of the reverse name
-        # registration['complex_number'] = int(data['reverse_name'][2:8], 16)
     elif data['name'] != "":
         registration = build_registration(data, None, None, {'name': data['name'], 'number': 0})
     else:
@@ -166,7 +154,7 @@ def build_registration(rows, forenames=None, surname=None, complex_data=None):
         "application_ref": rows['amendment_info'],
         "date": rows['registration_date'],
         "occupation": "",
-        "residence": rows['address'],
+        "residence": {"text": rows['address']},
         "migration_data": {
             "registration_no": rows['registration_no'],
             "extra": {
@@ -190,7 +178,6 @@ def build_registration(rows, forenames=None, surname=None, complex_data=None):
 
 
 def insert_data(registration):
-    # print('registration = ', registration)
     json_data = registration
     url = app.config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
