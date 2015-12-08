@@ -265,7 +265,7 @@ def process_error(database, status_code, rows, registration):
         "legacy_rem_name": rows['remainder_name'],
         "legacy_punc_code": rows['punctuation_code'],
         "class": rows['class_type'],
-        "register_name": registration['debtor_name']
+        "register_name": registration[0]['debtor_name']
     }
 
     error_queue.write_error(error_detail)

@@ -32,7 +32,11 @@ class FakeResponse(requests.Response):
                 "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
                 "property": "",
                 "parish_district": "",
-                "priority_notice_ref": ""
+                "priority_notice_ref": "",
+                "reg_no": "12345",
+                "class": "C1",
+                "date": "2011-06-01",
+                "type": "C1"
             }
         ]
         return data
@@ -40,7 +44,7 @@ class FakeResponse(requests.Response):
 
 test_data = [
     {
-        "input": {
+        "input": [{
             "time": "2014-09-02 20:01:45.504423",
             "registration_no": "2342",
             "priority_notice": " ",
@@ -50,15 +54,15 @@ test_data = [
             "class_type": "WO(B)",
             "remainder_name": "GUYUBALDOALE",
             "punctuation_code": "2326CA61",
-            "name": " ",
-            "address": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
+            "name": "",
+            "address": "9320 KAREEM LOCK EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
             "occupation": "CARPENTER",
             "counties": "",
             "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
             "property": "",
             "parish_district": "",
             "priority_notice_ref": ""
-        },
+        }],
         "expected": {
             "application_type": "WO(B)",
             "application_ref": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
@@ -68,10 +72,8 @@ test_data = [
                 "surname": "O'BREE"
             },
             "occupation": "",
-            "residence": [
-                {"text": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"},
-                {"text": "23 WILLIAM PRANCE ROAD, PLYMOUTH"}
-            ],
+            "residence":
+                {"text": "9320 KAREEM LOCK EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH"},
             "migration_data": {
                 "registration_no": "2342",
                 "extra": {
@@ -86,7 +88,7 @@ test_data = [
             }
         }
     }, {
-        "input": {
+        "input": [{
             "time": "2014-09-02 20:01:45.504423",
             "registration_no": "2342",
             "priority_notice": " ",
@@ -96,15 +98,15 @@ test_data = [
             "class_type": "WO(B)",
             "remainder_name": "GUYUBALDOALE",
             "punctuation_code": "23262A",
-            "name": " ",
-            "address": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
+            "name": "",
+            "address": "9320 KAREEM LOCK EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
             "occupation": "CARPENTER",
             "counties": "",
             "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
             "property": "",
             "parish_district": "",
             "priority_notice_ref": ""
-        },
+        }],
         "expected": {
             "application_type": "WO(B)",
             "application_ref": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
@@ -114,10 +116,8 @@ test_data = [
                 "surname": ""
             },
             "occupation": "",
-            "residence": [
-                {"text": "9320 KAREEM LOCK JACOBSSIDE EAST HARRYLAND OA34 7BC CUMBRIA"},
-                {"text": "23 WILLIAM PRANCE ROAD, PLYMOUTH"}
-            ],
+            "residence":
+                {"text": "9320 KAREEM LOCK EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH"},
             "migration_data": {
                 "registration_no": "2342",
                 "extra": {
@@ -131,8 +131,56 @@ test_data = [
                 }
             }
         }
-    }
+    },
 ]
+
+complex_data = {
+    "input": [{
+        "time": "2014-09-02 20:01:45.504423",
+        "registration_no": "2342",
+        "priority_notice": " ",
+        "reverse_name": "F91041E800000000000000F3",
+        "property_county": 0,
+        "registration_date": "2014-12-28",
+        "class_type": "WO(B)",
+        "remainder_name": "",
+        "punctuation_code": "",
+        "name": "BORERBERG VISCOUNT",
+        "address": "9320 KAREEM LOCK EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH",
+        "occupation": "CARPENTER",
+        "counties": "",
+        "amendment_info": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
+        "property": "",
+        "parish_district": "",
+        "priority_notice_ref": ""
+    }],
+    "expected": {
+        "application_type": "WO(B)",
+        "application_ref": "MCLAUGHLINTOWN COUNTY COURT 805 OF 2015",
+        "date": "2014-12-28",
+        "debtor_name": {
+            "forenames": ["GUY", "UBALDO", "ALEXZANDER", "WELCH"],
+            "surname": ""
+        },
+        "complex": {"name": "BORERBERG VISCOUNT",
+                    "number": 1065448},
+        "occupation": "",
+        "residence":
+            {"text": "9320 KAREEM LOCK EAST HARRYLAND OA34 7BC CUMBRIA   23 WILLIAM PRANCE ROAD, PLYMOUTH"},
+        "migration_data": {
+            "registration_no": "2342",
+            "extra": {
+                "occupation": "CARPENTER",
+                "of_note": {
+                    "counties": "",
+                    "property": "",
+                    "parish_district": "",
+                    "priority_notice_ref": ""
+                },
+                }
+        }
+    }
+}
 
 test_hex = [
     {
@@ -204,9 +252,9 @@ class TestMigrationProcess:
     @mock.patch('requests.get', return_value=fake_auto_success)
     def test_migrate(self, mock_post, mock_get):
         data = test_data[0]
-        extracted = extract_data(data['input'])
+        extracted = extract_data(data['input'], 'C1')
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert extracted['debtor_name'] == data['expected']['debtor_name']
         assert extracted['residence'] == data['expected']['residence']
@@ -217,7 +265,7 @@ class TestMigrationProcess:
         data = test_hex[0]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -227,7 +275,7 @@ class TestMigrationProcess:
         data = test_hex[1]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -237,7 +285,7 @@ class TestMigrationProcess:
         data = test_hex[2]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -247,7 +295,7 @@ class TestMigrationProcess:
         data = test_hex[3]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -257,7 +305,7 @@ class TestMigrationProcess:
         data = test_hex[4]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -267,7 +315,7 @@ class TestMigrationProcess:
         data = test_hex[5]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -277,7 +325,7 @@ class TestMigrationProcess:
         data = test_hex[6]
         hexconvert = hex_translator(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert hexconvert[0] == data['expected'][0]
 
@@ -285,14 +333,14 @@ class TestMigrationProcess:
     @mock.patch('requests.get', return_value=fake_auto_fail)
     def test_legacy_fail(self, mock_post, mock_get):
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 400
 
     @mock.patch('requests.post', return_value=fake_auto_fail)
     @mock.patch('requests.get', return_value=fake_auto_success)
     def test_register_fail(self, mock_post, mock_get):
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 202
 
     # test that multiple addresses supplied with 3 blank separation format correctly
@@ -302,7 +350,7 @@ class TestMigrationProcess:
         data = test_address[0]
         extracted = extract_address(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert extracted[0] == data['expected'][0]
 
@@ -312,7 +360,7 @@ class TestMigrationProcess:
         data = test_address[1]
         extracted = extract_address(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert extracted[0] == data['expected'][0]
 
@@ -322,7 +370,7 @@ class TestMigrationProcess:
         data = test_address[2]
         extracted = extract_address(data['input'])
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert extracted[0] == data['expected'][0]
 
@@ -330,9 +378,19 @@ class TestMigrationProcess:
     @mock.patch('requests.get', return_value=fake_auto_success)
     def test_no_surname(self, mock_post, mock_get):
         data = test_data[1]
-        extracted = extract_data(data['input'])
+        extracted = extract_data(data['input'], "C4")
         headers = {'Content-Type': 'application/json'}
-        response = self.app.post('/begin?start_date=2015-04-21&end_date=2015-04-22', headers=headers)
+        response = self.app.post('/begin', headers=headers)
         assert response.status_code == 200
         assert extracted['debtor_name'] == data['expected']['debtor_name']
         assert extracted['residence'] == data['expected']['residence']
+
+    @mock.patch('requests.post', return_value=fake_auto_success)
+    @mock.patch('requests.get', return_value=fake_auto_success)
+    def test_complex_number(self, mock_post, mock_get):
+        data = complex_data
+        extracted = extract_data(data['input'], "WO")
+        headers = {'Content-Type': 'application/json'}
+        response = self.app.post('/begin', headers=headers)
+        assert response.status_code == 200
+        assert extracted['complex'] == data['expected']['complex']
