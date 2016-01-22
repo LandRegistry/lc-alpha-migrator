@@ -2,6 +2,8 @@ from application import app, error_queue
 from flask import Response, request
 import json
 import logging
+import traceback
+import threading
 import requests
 import operator
 from datetime import datetime
@@ -12,23 +14,71 @@ def index():
     return Response(status=200)
 
 
+@app.route('/status', methods=['GET'])
+def get_status():
+    s = "running" if is_running() else "idle"
+    return Response(json.dumps({"status": s}), status=200)
+
+
 @app.route('/begin', methods=["POST"])
 def start_migration():
+    if not is_running():
+        start_migration()
+        return Response(status=200)
+    else:
+        return Response(status=400)
+
+
+def is_running():
+    threads = [t for t in threading.enumerate() if t.name == 'migrate_thread']
+    s = True if len(threads) > 0 and threads[0].is_alive() else False
+    return s
+
+
+def start_migration():
+    t = threading.Thread(name='migrate_thread', target=migration_thread)
+    t.daemon = False
+    t.start()
+
+
+def migration_thread():
     error = False
-    logging.info('Logging invoked: migration started')
-
+    logging.info('Migration started')
+    error_count = 0
     # Get all the registration numbers that need to be migrated
-    url = app.config['B2B_LEGACY_URL'] + '/land_charges'
-    headers = {'Content-Type': 'application/json'}
-    response = requests.get(url, headers=headers, params={'type': 'NR'})
 
-    if response.status_code == 200:
-        reg_data = response.json()
-        total_read = len(reg_data)
-        total_inc_history = 0
+    if False:
+        url = app.config['B2B_LEGACY_URL'] + '/land_charges'
+        headers = {'Content-Type': 'application/json'}
+        response = requests.get(url, headers=headers, params={'type': 'NR'})
 
-        for rows in reg_data:
+        if response.status_code == 200:
+            reg_data = response.json()
+            if not isinstance(reg_data, list):
+                msg = "Response from {} is not a list.".format(url)
+                logging.error(msg)
+                logging.error(reg_data)
+                report_error("E", msg, json.dumps(reg_data))
+                return
+        else:
+            msg = "Received %d from %s", response.status_code, url
+            logging.error(msg)
+            report_error("E", msg, "")
+            return
+    else:
+        reg_data = [{
+            'class': 'C4', 'reg_no': '30563', 'date': '1991-07-05'
+        }]
+
+    total_read = len(reg_data)
+    logging.info("Retrieved %d items from /land_charges", total_read)
+    total_inc_history = 0
+
+    for rows in reg_data:
+
+        try:
             # For each registration number returned, get history of that application.
+            logging.info("Process %s %s %s", rows['class'], rows['reg_no'], rows['date'])
             url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + rows['reg_no']
             headers = {'Content-Type': 'application/json'}
             response = requests.get(url, headers=headers, params={'class': rows['class'], 'date': rows['date']})
@@ -44,6 +94,9 @@ def start_migration():
             registration = []
             for x, registers in enumerate(history):
                 registers['class'] = convert_class(registers['class'])
+                logging.info("  > Historical record %s %s %s", registers['class'], registers['reg_no'],
+                             registers['date'])
+
                 url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(registers['reg_no'])
                 headers = {'Content-Type': 'application/json'}
                 response = requests.get(url, headers=headers,
@@ -51,9 +104,7 @@ def start_migration():
                 if response.status_code == 200:
                     registration.append(extract_data(response.json(), registers['type']))
                     registration[x]['reg_no'] = registers['reg_no']
-                elif response.status_code != 404:
-                    print('error!!', response.status_code)
-                else:
+                elif response.status_code == 404:
                     del registers['sorted_date']
                     registers['application_type'] = registers['class']
                     registers['application_ref'] = ' '
@@ -61,41 +112,62 @@ def start_migration():
                                                    "extra": {}}
                     registers['residence'] = {"text": ""}
                     registration.append(registers)
+                else:
+                    message = "Unexpected {} return code for GET {}".format(response.status_code, url)
+                    logging.error("  > " + message)
+                    error_count += 1
+                    report_error("E", message, response.text)
 
             registration_status_code = insert_data(registration)
 
             if registration_status_code != 200:
-                logging.error("Migration error: %s %s %s", registration_status_code, rows, registration)
-                process_error("Register Database", registration_status_code, rows, registration)
-                error = True
+                url = app.config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
+                message = "Unexpected {} return code for POST {}".format(registration_status_code, url)
+                logging.error("  > " + message)
+                report_error("E", message, "")
 
-    else:
-        logging.error("Received " + str(response.status_code))
-        return Response(status=response.status_code)
+                logging.error("Rows:")
+                logging.error(rows)
+                logging.error("Registration:")
+                logging.error(registration)
+                error_count += 1
+        except Exception as e:
+            logging.error('Unhandled exception: %s', str(e))
+            report_exception(e)
+            pass
 
-    message = {"total NR records read": total_read,
-               "total records processed including history": total_inc_history}
-    if error is True:
-        return Response(json.dumps(message), status=202, mimetype='application/json')
-    else:
-        return Response(json.dumps(message), status=200, mimetype='application/json')
+
+    logging.info('Migration complete')
+    logging.info("Total registrations read: %d", total_read)
+    logging.info("Total records processed: %d", total_inc_history)
+    logging.info("Total errors: %d", error_count)
+
+
+def report_exception(exception):
+    call_stack = traceback.format_exc()
+    error = {
+        "type": "E",
+        "message": str(exception),
+        "stack": call_stack,
+        "subsystem": app.config["APPLICATION_NAME"]
+    }
+    error_queue.write_error(error)
+
+
+def report_error(error_type, message, stack):
+    error = {
+        "type": error_type,
+        "message": message,
+        "subsystem": app.config["APPLICATION_NAME"],
+        "stack": stack
+    }
+    error_queue.write_error(error)
 
 
 # For testing error queueing:
 @app.route('/force_error', methods=['POST'])
 def force_error():
-    data = request.get_json(force=True)
-    row = {
-        "registration_no": data['registration_no'],
-        "reverse_name": data['reverse_name'],
-        "remainder_name": data['remainder_name'],
-        "punctuation_code": data['punctuation_code'],
-        "class_type": data['class_type']
-    }
-    registration = {
-        "debtor_name": data['debtor_name']
-    }
-    process_error("Test Errors", "500", row, registration)
+    report_error("I", "Test Error", "Stack goes here")
     return Response(status=200)
 
 
@@ -257,6 +329,7 @@ def extract_address(address):
 
 
 def process_error(database, status_code, rows, registration):
+    logging.warning("Deprecated method: process_error")
     error_detail = {
         "database": database,
         "status": status_code,
