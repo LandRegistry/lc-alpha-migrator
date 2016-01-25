@@ -85,7 +85,7 @@ def get_doc_history(reg_no, class_of_charge, date):
 def get_land_charge(reg_no, class_of_charge, date):
     url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(reg_no)
     headers = {'Content-Type': 'application/json'}
-    logging.info('  > GET %s', url)
+    logging.info('  > GET %s?class=%s&date=%s', url, class_of_charge, date)
     response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
     if response.status_code == 200:
         return response.json()
