@@ -70,7 +70,7 @@ def get_registrations_to_migrate():
 def get_doc_history(reg_no, class_of_charge, date):
     url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + reg_no
     headers = {'Content-Type': 'application/json'}
-    logging.info("  > GET %s", url)
+    logging.info("  > GET %s?class=%s&date=%s", url, class_of_charge, date)
     response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
 
     if response.status_code != 200:
@@ -151,9 +151,9 @@ def migration_thread():
             logging.info("Process %s %s %s", rows['class'], rows['reg_no'], rows['date'])
 
             history = get_doc_history(rows['reg_no'], rows['class'], rows['date'])
-            if history is None:
-                logging.error("No document history information found")
-                history = []
+            if history is None or len(history) == 0:
+                logging.error("No document history information found") # TODO: need a bucket of these
+                continue
 
             total_inc_history += len(history)
             for i in history:
