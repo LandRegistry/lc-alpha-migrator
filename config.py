@@ -7,7 +7,7 @@ class Config(object):
 
 
 class DevelopmentConfig(Config):
-    DEBUG = True
+    DEBUG = False
     B2B_LEGACY_URL = "http://localhost:5007"
     BANKRUPTCY_DATABASE_API = "http://localhost:5004"
 

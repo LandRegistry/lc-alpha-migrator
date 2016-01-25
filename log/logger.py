@@ -28,13 +28,14 @@ def setup_logging(config):
     # Our logging routines signal the start and end of the routes,
     # so the Werkzeug defaults aren't required. Keep warnings and above.
     logging.getLogger('werkzeug').setLevel(logging.WARN)
+    logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(logging.WARN)
 
     global app_name
     app_name = config['APPLICATION_NAME']
 
     root_logger = logging.getLogger()
     logging.setLogRecordFactory(record_factory)
-    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(levelname)s [%(appname)s]'
+    formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(name)s %(levelname)s [%(appname)s]'
                                   ' (PID %(process)d) Message: %(message)s',
                                   "%Y-%m-%d %H:%M:%S")
 

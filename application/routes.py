@@ -41,51 +41,121 @@ def start_migration():
     t.start()
 
 
+class MigrationException(RuntimeError):
+    def __init__(self, message, text=None):
+        super(RuntimeError, self).__init__(message)
+        self.text = text
+
+
+def get_registrations_to_migrate():
+    # url = app.config['B2B_LEGACY_URL'] + '/land_charges'
+    # headers = {'Content-Type': 'application/json'}
+    # logging.info("GET %s", url)
+    # response = requests.get(url, headers=headers, params={'type': 'NR'})
+    #
+    # if response.status_code == 200:
+    #     return response.json()
+    # else:
+    #     raise MigrationException("Unexpected response {} from {}", response.status_code, url)
+
+    return [{
+        'class': 'WO(B)', 'reg_no': '45553', 'date': '2011-03-30'
+    }, {
+        'class': "WO", "reg_no": '6254', "date": "1995-04-11"
+    }]
+
+
+# TODO: Important! Can we have duplicate rows on T_LC_DOC_INFO with matching reg number and date???
+
+def get_doc_history(reg_no, class_of_charge, date):
+    url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + reg_no
+    headers = {'Content-Type': 'application/json'}
+    logging.info("  > GET %s", url)
+    response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
+
+    if response.status_code != 200:
+        logging.warning("Non-200 return code {} for {}".format(response.status_code, url))
+
+    if response.status_code == 404:
+        return None
+
+    return response.json()
+
+
+def get_land_charge(reg_no, class_of_charge, date):
+    url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(reg_no)
+    headers = {'Content-Type': 'application/json'}
+    logging.info('  > GET %s', url)
+    response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
+    if response.status_code == 200:
+        return response.json()
+    elif response.status_code == 404:
+        return None
+    else:
+        raise MigrationException("Unexpected response {} from {}".format(response.status_code, url),
+                                 response.text)
+
+
+def add_flag(data, flag):
+    for item in data:
+        item['migration_data']['flags'].append(flag)
+
+
+def flag_oddities(data):
+    # There aren't many circumstances when we can't migrate something - often source data consists only
+    # of registration number, date and class of charge (i.e. rest of the data is in the form image)
+    # Flag the oddities up anyway so we can check out any data quality issues
+
+    if data[0]['type'] != 'NR':
+        add_flag(data, "Does not start with NR")
+
+    for item in data:
+        print('-------------')
+        print(item)
+        print('-------------')
+
+        if item['type'] == 'NR':
+            if item != data[0]:
+                add_flag(data, "NR is not the first item")
+            if item['migration_data']['original']['registration_no'] != item['registration']['registration_no'] or \
+               item['migration_data']['original']['date'] != item['registration']['date']:
+                add_flag(data, "NR has inconsitent original details")
+
+
 def migration_thread():
-    error = False
     logging.info('Migration started')
     error_count = 0
     # Get all the registration numbers that need to be migrated
 
-    if False:
-        url = app.config['B2B_LEGACY_URL'] + '/land_charges'
-        headers = {'Content-Type': 'application/json'}
-        response = requests.get(url, headers=headers, params={'type': 'NR'})
-
-        if response.status_code == 200:
-            reg_data = response.json()
-            if not isinstance(reg_data, list):
-                msg = "Response from {} is not a list.".format(url)
-                logging.error(msg)
-                logging.error(reg_data)
-                report_error("E", msg, json.dumps(reg_data))
-                return
-        else:
-            msg = "Received %d from %s", response.status_code, url
+    try:
+        reg_data = get_registrations_to_migrate()
+        if not isinstance(reg_data, list):
+            msg = "Registration data is not a list:"
             logging.error(msg)
-            report_error("E", msg, "")
+            logging.error(reg_data)
+            report_error("E", msg, json.dumps(reg_data))
             return
-    else:
-        reg_data = [{
-            'class': 'C4', 'reg_no': '30563', 'date': '1991-07-05'
-        }]
 
-    total_read = len(reg_data)
-    logging.info("Retrieved %d items from /land_charges", total_read)
+        total_read = len(reg_data)
+        logging.info("Retrieved %d items from /land_charges", total_read)
+
+    except Exception as e:
+        logging.error('Unhandled exception: %s', str(e))
+        report_exception(e)
+        raise
+
     total_inc_history = 0
-
     for rows in reg_data:
-
         try:
             # For each registration number returned, get history of that application.
             logging.info("Process %s %s %s", rows['class'], rows['reg_no'], rows['date'])
-            url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + rows['reg_no']
-            headers = {'Content-Type': 'application/json'}
-            response = requests.get(url, headers=headers, params={'class': rows['class'], 'date': rows['date']})
 
-            history = response.json()
+            history = get_doc_history(rows['reg_no'], rows['class'], rows['date'])
+            if history is None:
+                logging.error("No document history information found")
+                history = []
+
             total_inc_history += len(history)
-
             for i in history:
                 i['sorted_date'] = datetime.strptime(i['date'], '%Y-%m-%d').date()
                 i['reg_no'] = int(i['reg_no'])
@@ -97,29 +167,31 @@ def migration_thread():
                 logging.info("  > Historical record %s %s %s", registers['class'], registers['reg_no'],
                              registers['date'])
 
-                url = app.config['B2B_LEGACY_URL'] + '/land_charges/' + str(registers['reg_no'])
-                headers = {'Content-Type': 'application/json'}
-                response = requests.get(url, headers=headers,
-                                        params={'class': registers['class'], 'date': registers['date']})
-                if response.status_code == 200:
-                    registration.append(extract_data(response.json(), registers['type']))
+                land_charges = get_land_charge(registers['reg_no'], registers['class'], registers['date'])
+                if land_charges is not None:
+                    registration.append(extract_data(land_charges, registers['type']))
                     registration[x]['reg_no'] = registers['reg_no']
-                elif response.status_code == 404:
+                else:
                     del registers['sorted_date']
-                    registers['application_type'] = registers['class']
+                    registers['registration'] = {
+                        'registration_no': registers['reg_no'],
+                        'date': registers['date']
+                    }
+                    registers['class_of_charge'] = registers['class']
                     registers['application_ref'] = ' '
-                    registers['migration_data'] = {"registration_no": registers['reg_no'],
-                                                   "extra": {}}
+                    registers['migration_data'] = {
+                        'flags': [],
+                        'original': {
+                            'registration_no': int(registers['orig_number']),
+                            'date': registers['orig_date'],
+                            'class': registers['orig_class']
+                        }
+                    }
                     registers['residence'] = {"text": ""}
                     registration.append(registers)
-                else:
-                    message = "Unexpected {} return code for GET {}".format(response.status_code, url)
-                    logging.error("  > " + message)
-                    error_count += 1
-                    report_error("E", message, response.text)
 
+            flag_oddities(registration)
             registration_status_code = insert_data(registration)
-
             if registration_status_code != 200:
                 url = app.config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
                 message = "Unexpected {} return code for POST {}".format(registration_status_code, url)
@@ -133,9 +205,9 @@ def migration_thread():
                 error_count += 1
         except Exception as e:
             logging.error('Unhandled exception: %s', str(e))
+            logging.error('Failed to migrate  %s %s %s', rows['class'], rows['reg_no'], rows['date'])
             report_exception(e)
-            pass
-
+            error_count += 1
 
     logging.info('Migration complete')
     logging.info("Total registrations read: %d", total_read)
@@ -151,6 +223,7 @@ def report_exception(exception):
         "stack": call_stack,
         "subsystem": app.config["APPLICATION_NAME"]
     }
+    # TODO: also report exception.text
     error_queue.write_error(error)
 
 
@@ -174,8 +247,8 @@ def force_error():
 def extract_data(rows, app_type):
     data = rows[0]
     # determine the type of extraction needed - simple name/complex name/local authority
-    if data['reverse_name'][0:2] == 'F9':
-        print('we had a complex name', data['reverse_name'])
+    if data['reverse_name'][0:2] == 'F9':  # TODO: is this right? Isn't the cnum at the end of the string
+        logging.info('  > we had a complex name: %s', data['reverse_name'])
         registration = build_registration(data, None, None, {'name': data['name'],
                                                              'number': int(data['reverse_name'][2:8], 16)})
     elif data['name'] != "":
@@ -222,29 +295,31 @@ def extract_simple(rows):
 def build_registration(rows, forenames=None, surname=None, complex_data=None):
 
     registration = {
-        "application_type": rows['class_type'],
+        "class_of_charge": rows['class_type'],
         "application_ref": rows['amendment_info'],
-        "date": rows['registration_date'],
+        "registration": {
+            "date": rows['registration_date'],
+            "registration_no": rows['registration_no']
+        },
+        "date": rows['registration_date'],  # TODO: find actual date of appn
         "occupation": "",
         "residence": {"text": rows['address']},
         "migration_data": {
             "registration_no": rows['registration_no'],
             "extra": {
                 "occupation": rows['occupation'],
-                "of_note": {
-                    "counties": rows['counties'],
-                    "property": rows['property'],
-                    "parish_district": rows['parish_district'],
-                    "priority_notice_ref": rows['priority_notice_ref']
-                },
-                }
+                "counties": rows['counties'],
+                "property": rows['property'],
+                "parish_district": rows['parish_district'],
+                "priority_notice_ref": rows['priority_notice_ref']
+            }
         }
     }
     if complex_data is None:
-        registration['debtor_name'] = {"forenames": forenames, "surname": surname}
+        registration['debtor_names'] = [{"forenames": forenames, "surname": surname}]
     else:
         registration['complex'] = complex_data
-        registration['debtor_name'] = {"forenames": [""], "surname": ""}
+        registration['debtor_names'] = [{"forenames": [""], "surname": ""}]
 
     return registration
 
@@ -326,20 +401,3 @@ def extract_address(address):
             marker_pos = 0
             address_list.append(address_1.copy())
     return address_list
-
-
-def process_error(database, status_code, rows, registration):
-    logging.warning("Deprecated method: process_error")
-    error_detail = {
-        "database": database,
-        "status": status_code,
-        "registration_no": rows['registration_no'],
-        "legacy_name": rows['reverse_name'],
-        "legacy_rem_name": rows['remainder_name'],
-        "legacy_punc_code": rows['punctuation_code'],
-        "class": rows['class_type'],
-        "register_name": registration[0]['debtor_name']
-    }
-
-    error_queue.write_error(error_detail)
-    return
