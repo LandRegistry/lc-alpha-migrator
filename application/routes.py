@@ -58,11 +58,17 @@ def get_registrations_to_migrate():
     # else:
     #     raise MigrationException("Unexpected response {} from {}", response.status_code, url)
 
-    return [{
-        'class': 'WO(B)', 'reg_no': '45553', 'date': '2011-03-30'
-    }, {
-        'class': "WO", "reg_no": '6254', "date": "1995-04-11"
-    }]
+    # return [{
+    #     'class': 'WO(B)', 'reg_no': '45553', 'date': '2011-03-30'
+    # }, {
+    #     'class': "WO", "reg_no": '6254', "date": "1995-04-11"
+    # }]
+    return [
+        { 'class': 'C(IV)', 'reg_no': '100', 'date': '2005-04-13' }    
+    ]
+
+
+
 
 
 # TODO: Important! Can we have duplicate rows on T_LC_DOC_INFO with matching reg number and date???
@@ -70,8 +76,8 @@ def get_registrations_to_migrate():
 def get_doc_history(reg_no, class_of_charge, date):
     url = app.config['B2B_LEGACY_URL'] + '/doc_history/' + reg_no
     headers = {'Content-Type': 'application/json'}
-    logging.info("  > GET %s?class=%s&date=%s", url, class_of_charge, date)
-    response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
+    logging.info("  > GET %s?class=%s&date=%s", url, class_without_brackets(class_of_charge), date)
+    response = requests.get(url, headers=headers, params={'class': class_without_brackets(class_of_charge), 'date': date})
 
     if response.status_code != 200:
         logging.warning("Non-200 return code {} for {}".format(response.status_code, url))
@@ -117,9 +123,9 @@ def flag_oddities(data):
         if item['type'] == 'NR':
             if item != data[0]:
                 add_flag(data, "NR is not the first item")
-            if item['migration_data']['original']['registration_no'] != item['registration']['registration_no'] or \
-               item['migration_data']['original']['date'] != item['registration']['date']:
-                add_flag(data, "NR has inconsitent original details")
+            # if item['migration_data']['original']['registration_no'] != item['registration']['registration_no'] or \
+               # item['migration_data']['original']['date'] != item['registration']['date']:
+                # add_flag(data, "NR has inconsitent original details")
 
 
 def migration_thread():
@@ -246,18 +252,50 @@ def force_error():
 
 def extract_data(rows, app_type):
     data = rows[0]
-    # determine the type of extraction needed - simple name/complex name/local authority
-    if data['reverse_name'][0:2] == 'F9':  # TODO: is this right? Isn't the cnum at the end of the string
-        logging.info('  > we had a complex name: %s', data['reverse_name'])
-        registration = build_registration(data, None, None, {'name': data['name'],
-                                                             'number': int(data['reverse_name'][2:8], 16)})
-    elif data['name'] != "":
-        registration = build_registration(data, None, None, {'name': data['name'], 'number': 0})
-    else:
-        registration = extract_simple(data)
 
+    if data['reverse_name_hex'][-2:] == '01':
+        # County council
+        registration = build_registration(data, 'County Council', {'local': {'name': data['name'], 'area': '?????'}})
+    elif data['reverse_name_hex'][-2:] == '02':
+        # Rural council
+        registration = build_registration(data, 'Rural Council', {'local': {'name': data['name'], 'area': '?????'}})
+    elif data['reverse_name_hex'][-2:] == '04':
+        # Parish council
+        registration = build_registration(data, 'Parish Council', {'local': {'name': data['name'], 'area': '?????'}})
+    elif data['reverse_name_hex'][-2:] == '08':
+        # Other council
+        registration = build_registration(data, 'Other Council', {'local': {'name': data['name'], 'area': '?????'}})
+    elif data['reverse_name_hex'][-2:] == '16':
+        # Dev corp
+        registration = build_registration(data, 'Development Corporation', {'other': data['name']})
+    elif data['reverse_name_hex'][-2:] == 'F1':
+        # Ltd Company
+        registration = build_registration(data, 'Limited Company', {'company': data['name']})
+    elif data['reverse_name_hex'][-2:] == 'F2':
+        # Other
+        registration = build_registration(data, 'Other', {'other': data['name']})
+    elif data['reverse_name_hex'][-2:] == 'F3' and data['reverse_name_hex'][0:2] == 'F9':
+        logging.info('  > we have a complex name: %s', data['reverse_name'])
+        registration = build_registration(data, 'Complex Name', {'complex': {'name': data['name'], 'number': int(data['reverse_name'][2:8], 16)}})
+    else:
+        # Mundane name
+        registration = extract_simple(data)
+    
     registration['type'] = app_type
     return registration
+
+    # data = rows[0]
+
+    # # determine the type of extraction needed - simple name/complex name/local authority
+    # logging.info("HEX: " + data['reverse_name_hex'])
+    # if data['reverse_name_hex'][0:2] == 'F9':  # TODO: is this right? Isn't the cnum at the end of the string
+
+    # elif data['name'] != "":
+        
+    # else:
+        
+
+    
 
 
 def extract_simple(rows):
@@ -288,11 +326,12 @@ def extract_simple(rows):
 
     forenames = forenames.split()
 
-    registration = build_registration(rows, forenames, surname)
+    registration = build_registration(rows, 'Private Individual', {'private': {'forenames': forenames, 'surname': surname}})
     return registration
 
 
-def build_registration(rows, forenames=None, surname=None, complex_data=None):
+#def build_registration(rows, forenames=None, surname=None, complex_data=None):
+def build_registration(rows, name_type, name_data):
 
     registration = {
         "class_of_charge": rows['class_type'],
@@ -315,11 +354,36 @@ def build_registration(rows, forenames=None, surname=None, complex_data=None):
             }
         }
     }
-    if complex_data is None:
-        registration['debtor_names'] = [{"forenames": forenames, "surname": surname}]
-    else:
-        registration['complex'] = complex_data
-        registration['debtor_names'] = [{"forenames": [""], "surname": ""}]
+    
+    
+    
+    
+    
+    #if registration['class_of_charge'] in ['PA(B)', 'WO(B)']:
+    registration['eo_name'] = name_data
+    registration['eo_name']['estate_owner_ind'] = name_type
+    
+    # Add the remaining empty name options
+    if not 'local' in registration['eo_name']:
+        registration['eo_name']['local'] = {'name': None, 'area': None}
+    if not 'company' in registration['eo_name']:    
+        registration['eo_name']['company'] = None
+    if not 'other' in registration['eo_name']:
+        registration['eo_name']['other'] = None
+    if not 'complex' in registration['eo_name']:
+        registration['eo_name']['complex'] = {'name': None, 'number': 0}
+    if not 'private' in registration['eo_name']:
+        registration['eo_name']['private'] = {'forenames': [], 'surname': ''}
+
+    
+        # if complex_data is None:
+            # registration['eo_name'] = [{"forenames": forenames, "surname": surname}]
+        # else:
+
+            # registration['eo_name'] = [{"forenames": [""], "surname": ""}]       
+    # else:
+        # registration[
+
 
     return registration
 
@@ -374,6 +438,26 @@ def convert_class(class_of_charge):
         return charge.get(class_of_charge)
     else:
         return class_of_charge
+
+        
+        
+def class_without_brackets(class_of_charge):
+    charge = {
+        "C(I)": "C1",
+        "C(II)": "C2",
+        "C(III)": "C3",
+        "C(IV)": "C4",
+        "D(I)": "D1",
+        "D(II)": "D2",
+        "D(III)": "D3",
+        "PA(B)": "PAB",
+        "WO(B)": "WOB"
+    }
+    if class_of_charge in charge:
+        return charge.get(class_of_charge)
+    else:
+        return class_of_charge
+
 
 
 def extract_address(address):
