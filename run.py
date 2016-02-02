@@ -1,4 +1,27 @@
-from application.routes import app
+import config
+import importlib
+import os
+from application.routes import migrate
+from log.logger import setup_logging
+import sys
+
+if len(sys.argv) < 3:
+    print('Insuffcient parameters specified')
+    exit()
+    
+s = sys.argv[1]
+e = sys.argv[2]
 
 
-app.run(host="0.0.0.0", debug=True, port=5009)
+cfg = os.getenv('SETTINGS', 'DevelopmentConfig')
+c = getattr(importlib.import_module('config'), cfg)
+config = {}
+
+for key in dir(c):
+    if key.isupper():
+        config[key] = getattr(c, key)
+
+setup_logging(config)
+migrate(config, s, e)
+
+
