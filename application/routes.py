@@ -35,18 +35,23 @@ class MigrationException(RuntimeError):
 
 
 def get_registrations_to_migrate(start_date, end_date):
-    url = app_config['B2B_LEGACY_URL'] + '/land_charges/' + start_date + '/' + end_date
-    headers = {'Content-Type': 'application/json'}
-    logging.info("GET %s", url)
-    response = requests.get(url, headers=headers, params={'type': 'NR'})
-    logging.info("Responses: %d", response.status_code)
+    # url = app_config['B2B_LEGACY_URL'] + '/land_charges/' + start_date + '/' + end_date
+    # headers = {'Content-Type': 'application/json'}
+    # logging.info("GET %s", url)
+    # response = requests.get(url, headers=headers, params={'type': 'NR'})
+    # logging.info("Responses: %d", response.status_code)
     
-    if response.status_code == 200:
-        list = response.json()
-        logging.info("Found %d items", len(list))
-        return list
-    else:
-        raise MigrationException("Unexpected response {} from {}", response.status_code, url)
+    # if response.status_code == 200:
+        # list = response.json()
+        # logging.info("Found %d items", len(list))
+        # return list
+    # else:
+        # raise MigrationException("Unexpected response {} from {}".format(response.status_code, url))
+    return [{
+        "reg_no": "100",
+        "date": "2005-04-13",
+        "class": "C4"
+    }]
 
 
 
@@ -365,7 +370,9 @@ def extract_simple(rows):
 
 #def build_registration(rows, forenames=None, surname=None, complex_data=None):
 def build_registration(rows, name_type, name_data):
-
+    print("Build")
+    print(rows)
+    
     registration = {
         "class_of_charge": rows['class_type'],
         "application_ref": rows['amendment_info'],
@@ -382,7 +389,7 @@ def build_registration(rows, name_type, name_data):
             'flags': [],
             "extra": {
                 "occupation": rows['occupation'],
-                "counties": rows['counties'],
+                "counties": rows['property_county'].trim(),
                 "property": rows['property'],
                 "parish_district": rows['parish_district'],
                 "priority_notice_ref": rows['priority_notice_ref']
