@@ -46,7 +46,7 @@ def get_registrations_to_migrate(start_date, end_date):
         logging.info("Found %d items", len(list))
         return list
     else:
-        raise MigrationException("Unexpected response {} from {}", response.status_code, url)
+        raise MigrationException("Unexpected response {} from {}".format(response.status_code, url))
 
 
 
