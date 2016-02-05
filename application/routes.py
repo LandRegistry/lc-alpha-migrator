@@ -9,6 +9,7 @@ import requests
 import operator
 import re
 from datetime import datetime
+from application.utility import convert_class, class_without_brackets, parse_amend_info, save_to_file, reformat_county
 
 
 app_config = None
@@ -35,25 +36,29 @@ class MigrationException(RuntimeError):
 
 
 def get_registrations_to_migrate(start_date, end_date):
-    # url = app_config['B2B_LEGACY_URL'] + '/land_charges/' + start_date + '/' + end_date
-    # headers = {'Content-Type': 'application/json'}
-    # logging.info("GET %s", url)
-    # response = requests.get(url, headers=headers, params={'type': 'NR'})
-    # logging.info("Responses: %d", response.status_code)
+    url = app_config['B2B_LEGACY_URL'] + '/land_charges/' + start_date + '/' + end_date
+    headers = {'Content-Type': 'application/json'}
+    logging.info("GET %s", url)
+    response = requests.get(url, headers=headers, params={'type': 'NR'})
+    logging.info("Responses: %d", response.status_code)
     
-    # if response.status_code == 200:
-        # list = response.json()
-        # logging.info("Found %d items", len(list))
-        # return list
-    # else:
-        # raise MigrationException("Unexpected response {} from {}".format(response.status_code, url))
-    return [{
-        "reg_no": "100",
-        "date": "2005-04-13",
-        "class": "C4"
-    }]
+    if response.status_code == 200:
+        list = response.json()
+        logging.info("Found %d items", len(list))
+        return list
+    else:
+        raise MigrationException("Unexpected response {} from {}".format(response.status_code, url))
+    # return [{
+        # "reg_no": "100",
+        # "date": "2005-04-13",
+        # "class": "C4"
+    # },{
+        # "reg_no": "100",
+        # "date": "2011-10-10",
+        # "class": "PAB"
+    # }]
 
-
+    
 
 # TODO: Important! Can we have duplicate rows on T_LC_DOC_INFO with matching reg number and date???
 
@@ -97,7 +102,8 @@ def flag_oddities(data):
     # There aren't many circumstances when we can't migrate something - often source data consists only
     # of registration number, date and class of charge (i.e. rest of the data is in the form image)
     # Flag the oddities up anyway so we can check out any data quality issues
-
+    logging.debug("Data:")
+    logging.debug(data)
     if data[0]['type'] != 'NR':
         add_flag(data, "Does not start with NR")
 
@@ -109,7 +115,7 @@ def flag_oddities(data):
                # item['migration_data']['original']['date'] != item['registration']['date']:
                 # add_flag(data, "NR has inconsitent original details")
     
-    if 'eo_name' not in data[-1]:
+    if len(data[-1]['parties']) == 0:
         add_flag(data, "Last item lacks name information")
                 
 
@@ -119,8 +125,8 @@ def log_item_summary(data):
         final_log.append("Processed " + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
         for flag in item['migration_data']['flags']:
             final_log.append("  " + flag)
+               
         
-
 def migrate(config, start, end):
     global app_config
     global error_queue
@@ -188,36 +194,21 @@ def migrate(config, start, end):
                 
                 if land_charges is not None and len(land_charges) > 0:
                     registration.append(extract_data(land_charges, registers['type']))
-                    registration[x]['reg_no'] = numeric_reg_no
+                    #registration[x]['reg_no'] = numeric_reg_no
                     
                 else:
-                    del registers['sorted_date']
-                    registers['registration'] = {
-                        'registration_no': numeric_reg_no,
-                        'date': registers['date']
-                    }
-                    registers['class_of_charge'] = registers['class']
-                    registers['application_ref'] = ' '
-                    registers['migration_data'] = {
-                        'unconverted_reg_no': registers['reg_no'],
-                        'flags': [],
-                        'original': {
-                            'registration_no': registers['orig_number'],
-                            'date': registers['orig_date'],
-                            'class': registers['orig_class']
-                        }
-                    }
-                    registers['residence'] = {"text": ""}
-                    registration.append(registers)
+                    registration.append(build_dummy_row(registers))
+                
 
             flag_oddities(registration)
             
-            registration_status_code = insert_data(registration)
-            if registration_status_code != 200:
+            registration_response = insert_data(registration)
+            if registration_response.status_code != 200:
                 url = app_config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
-                message = "Unexpected {} return code for POST {}".format(registration_status_code, url)
+                message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
                 logging.error("  " + message)
                 report_error("E", message, "")
+                logging.error(registration_response.text)
 
                 logging.error("Rows:")
                 logging.error(rows)
@@ -225,7 +216,7 @@ def migrate(config, start, end):
                 logging.error(registration)
                 error_count += 1
                 item = registration[0]
-                final_log.append('Failed to migrate' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
+                final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
             else:
                 log_item_summary(registration)
                 
@@ -271,14 +262,6 @@ def report_error(error_type, message, stack):
     error_queue.put(error)
 
 
-
-# For testing error queueing:
-# @app.route('/force_error', methods=['POST'])
-# def force_error():
-    # report_error("I", "Test Error", "Stack goes here")
-    # return Response(status=200)
-
-
 def extract_data(rows, app_type):
     #print(rows)
     data = rows[0]
@@ -322,19 +305,6 @@ def extract_data(rows, app_type):
     registration['type'] = app_type
     return registration
 
-    # data = rows[0]
-
-    # # determine the type of extraction needed - simple name/complex name/local authority
-    # logging.info("HEX: " + data['reverse_name_hex'])
-    # if data['reverse_name_hex'][0:2] == 'F9':  # TODO: is this right? Isn't the cnum at the end of the string
-
-    # elif data['name'] != "":
-        
-    # else:
-        
-
-    
-
 
 def extract_simple(rows):
     hex_codes = []
@@ -367,55 +337,176 @@ def extract_simple(rows):
     registration = build_registration(rows, 'Private Individual', {'private': {'forenames': forenames, 'surname': surname}})
     return registration
 
+    
+def build_dummy_row(entry):
+    # registers['registration'] = {
+    # 'registration_no': numeric_reg_no,
+    # 'date': registers['date']
+    # }
+    # registers['class_of_charge'] = registers['class']
+    # registers['application_ref'] = ' '
+    # registers['migration_data'] = {
+    # 'unconverted_reg_no': registers['reg_no'],
+    # 'flags': [],
+    # 'original': {
+    # 'registration_no': registers['orig_number'],
+    # 'date': registers['orig_date'],
+    # 'class': registers['orig_class']
+    # }
+    # }
+    # registers['residence'] = {"text": ""}
+    logging.debug('Entry:')
+    logging.debug(entry)
+    
+    entry = {
+        "registration": {
+            "registration_no": re.sub("/", "", entry['reg_no']),
+            "date": entry['date']
+        },
+        "parties": [],
+        "type": entry['type'],
+        "class_of_charge": class_without_brackets(entry['class']),
+        "applicant": {'name': '', 'address': '', 'key_number': '', 'reference': ''},
+        "additional_information": "",
+        "migration_data": {
+            'unconverted_reg_no': entry['reg_no'],
+            'flags': []
+        }       
+    }
+    
+    if entry['class_of_charge'] not in ['PAB', 'WOB']:
+        entry['particulars'] = {
+            'counties': [],
+            'district': '',
+            'description': ''
+        }
+    return entry
 
-#def build_registration(rows, forenames=None, surname=None, complex_data=None):
+
+
 def build_registration(rows, name_type, name_data):
-    print("Build")
-    print(rows)
+    logging.debug('Head Entry:')
+    logging.debug(json.dumps(rows))
+    
+    coc = class_without_brackets(rows['class_type'])
+    if coc in ['PAB', 'WOB']:
+        eo_type = "Debtor"
+        occupation = rows['occupation']
+    else:
+        eo_type = "Estate Owner"
+        occupation = ''
+       
+    county_text = rows['property_county'].strip()
+    
+    if county_text == 'BANKS' and coc in ['PA', 'WO', 'DA']: #  Special case for <1% of the data...
+        county_text = rows['counties']
+    
+    pty_desc = rows['property']
+    parish_district = rows['parish_district']
     
     registration = {
-        "class_of_charge": rows['class_type'],
-        "application_ref": rows['amendment_info'],
+        "class_of_charge": coc,
         "registration": {
             "date": rows['registration_date'],
-            "registration_no": rows['registration_no']
+            "registration_no": str(rows['registration_no'])
         },
-        "date": rows['registration_date'],  # TODO: find actual date of appn
-        "occupation": "",
-        "residence": {"text": rows['address']},
+        "parties": [{
+            "type": eo_type,
+        }],
+        "applicant": {
+            'name': '',
+            'address': '',
+            'key_number': '',
+            'reference': ''
+        },
+        "additional_information": "",
         "migration_data": {
-            "registration_no": rows['registration_no'],
             'unconverted_reg_no': rows['registration_no'],
-            'flags': [],
-            "extra": {
-                "occupation": rows['occupation'],
-                "counties": rows['property_county'].trim(),
-                "property": rows['property'],
-                "parish_district": rows['parish_district'],
-                "priority_notice_ref": rows['priority_notice_ref']
-            }
+            'amend_info': rows['amendment_info'],
+            'flags': []
         }
     }
+    
+    amend = parse_amend_info(rows['amendment_info'])
+    registration['additional_information'] = amend['additional_information']
+    
+    if coc in ['PAB', 'WOB']:
+        registration['parties'][0]['occupation'] = occupation
+        registration['parties'][0]['trading_name'] = ''
+        registration['parties'][0]['residence_withheld'] = False
+        registration['parties'][0]['case_reference'] = amend['reference']
+        registration['parties'][0]['addresses'] = []
+        
+        address_strings = rows['address'].split('   ')
+        for address in address_strings:
+            addr_obj = {
+                'type': 'Residence',
+                'address_string': address            
+            }
+            registration['parties'][0]['addresses'].append(addr_obj)
+        
+        
+        if amend['court'] is not None:
+            registration['parties'].append({
+                'type': 'Court',
+                'names': [ {
+                    'type': 'Other',
+                    'other': amend['court']
+                } ]
+            })       
+        
+    else:
+        registration['particulars'] = {
+            'counties': [reformat_county(county_text)],
+            'district': parish_district,
+            'description': pty_desc
+        }
+    
+    
+    
+    # registration = {
+        # # "class_of_charge": rows['class_type'],
+        # "application_ref": rows['amendment_info'],
+        # #"registration": {
+        # #   "date": rows['registration_date'],
+        # #   "registration_no": rows['registration_no']
+        # #},
+        # #"date": rows['registration_date'],  # TODO: find actual date of appn
+        # "occupation": "",
+        # "residence": {"text": rows['address']},
+        # "migration_data": {
+            # "registration_no": rows['registration_no'],
+            # 'unconverted_reg_no': rows['registration_no'],
+            # 'flags': [],
+            # "extra": {
+                # "occupation": rows['occupation'],
+                # "counties": rows['property_county'].strip(),
+                # "property": rows['property'],
+                # "parish_district": rows['parish_district'],
+                # "priority_notice_ref": rows['priority_notice_ref']
+            # }
+        # }
+    # }
     
     
     
     
     
     #if registration['class_of_charge'] in ['PA(B)', 'WO(B)']:
-    registration['eo_name'] = name_data
-    registration['eo_name']['estate_owner_ind'] = name_type
+    registration['parties'][0]['names'] = [name_data]
+    registration['parties'][0]['names'][0]['type'] = name_type
     
     # Add the remaining empty name options
-    if not 'local' in registration['eo_name']:
-        registration['eo_name']['local'] = {'name': None, 'area': None}
-    if not 'company' in registration['eo_name']:    
-        registration['eo_name']['company'] = None
-    if not 'other' in registration['eo_name']:
-        registration['eo_name']['other'] = None
-    if not 'complex' in registration['eo_name']:
-        registration['eo_name']['complex'] = {'name': None, 'number': 0}
-    if not 'private' in registration['eo_name']:
-        registration['eo_name']['private'] = {'forenames': [], 'surname': ''}
+    # if not 'local' in registration['eo_name']:
+        # registration['eo_name']['local'] = {'name': None, 'area': None}
+    # if not 'company' in registration['eo_name']:    
+        # registration['eo_name']['company'] = None
+    # if not 'other' in registration['eo_name']:
+        # registration['eo_name']['other'] = None
+    # if not 'complex' in registration['eo_name']:
+        # registration['eo_name']['complex'] = {'name': None, 'number': 0}
+    # if not 'private' in registration['eo_name']:
+        # registration['eo_name']['private'] = {'forenames': [], 'surname': ''}
 
     
         # if complex_data is None:
@@ -432,100 +523,49 @@ def build_registration(rows, name_type, name_data):
 
 def insert_data(registration):
     json_data = registration
+
+    save_to_file(json_data)
+    
     url = app_config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
     logging.info("  POST %s", url)
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
     logging.info("  Response: %d", response.status_code)
     
-    registration_status_code = response.status_code
+    registration_status_code = response
     # add code below to force errors
     # registration_status_code = 500
     return registration_status_code
 
 
 def hex_translator(hex_code):
-    compare_bit = 0x1F
-    compare_int = int(compare_bit)
-    myint = int(hex_code, 16)
-    int_3 = myint >> 5
-    bit_3 = bin(int_3)
-    diff = compare_int & myint
-    diff_bit = (bin(diff))
-    dec_5 = int(diff_bit, 2)
-    punctuation = {
-        "0b1": " ",
-        "0b10": "-",
-        "0b11": "'",
-        "0b100": "(",
-        "0b101": ")",
-        "0b110": "*",
-        "0b0": "&"
-    }
+    mask = 0x1F
+    code_int = int(hex_code, 16)
+    length = code_int & mask
+    punc_code = code_int >> 5
+    punctuation = ['&', ' ', '-', "'", '(', ')', '*']
+    
+    # compare_bit = 0x1F
+    # compare_int = int(compare_bit)
+    # myint = int(hex_code, 16)
+    # int_3 = myint >> 5
+    # bit_3 = bin(int_3)
+    # diff = compare_int & myint
+    # diff_bit = (bin(diff))
+    # dec_5 = int(diff_bit, 2)
+    # punctuation = {
+        # "0b1": " ",
+        # "0b10": "-",
+        # "0b11": "'",
+        # "0b100": "(",
+        # "0b101": ")",
+        # "0b110": "*",
+        # "0b0": "&"
+    # }
 
-    return punctuation[str(bit_3)], dec_5
-
-
-def convert_class(class_of_charge):
-    charge = {
-        "C1": "C(I)",
-        "C2": "C(II)",
-        "C3": "C(III)",
-        "C4": "C(IV)",
-        "D1": "D(I)",
-        "D2": "D(II)",
-        "D3": "D(III)",
-        "PAB": "PA(B)",
-        "WOB": "WO(B)"
-    }
-    if class_of_charge in charge:
-        return charge.get(class_of_charge)
-    else:
-        return class_of_charge
-
-        
-        
-def class_without_brackets(class_of_charge):
-    charge = {
-        "C(I)": "C1",
-        "C(II)": "C2",
-        "C(III)": "C3",
-        "C(IV)": "C4",
-        "D(I)": "D1",
-        "D(II)": "D2",
-        "D(III)": "D3",
-        "PA(B)": "PAB",
-        "WO(B)": "WOB"
-    }
-    if class_of_charge in charge:
-        return charge.get(class_of_charge)
-    else:
-        return class_of_charge
+    #return punctuation[str(bit_3)], dec_5
+    return punctuation[punc_code], length
 
 
 
-def extract_address(address):
-    marker = "   "
-    address_list = []
-    address_1 = {
-        "text": ""
-    }
 
-    try:
-        marker_pos = address.index(marker)
-    except ValueError:
-        address_1['text'] = address
-        address_list.append(address_1.copy())
-        return address_list
-
-    while marker_pos > 0:
-        address_1['text'] = address[:marker_pos]
-        address = address[marker_pos + 3:]
-        address_list.append(address_1.copy())
-        try:
-            marker_pos = address.index(marker)
-        except ValueError:
-            address_1['text'] = address
-            marker_pos = 0
-            address_list.append(address_1.copy())
-    return address_list
