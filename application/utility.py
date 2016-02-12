@@ -67,6 +67,13 @@ def parse_amend_info(info):
     
     
 def reformat_county(county):
+    known_variations = {
+        'CORNWALL' : 'Cornwall (including Isles of Scilly)'    
+    }
+    
+    if county in known_variations:
+        county = known_variations[county]
+
     match = re.match(r"CITY OF (.*)", county)
     if match is not None:
         c = match.group(1)
