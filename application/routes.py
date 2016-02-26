@@ -49,10 +49,11 @@ def get_registrations_to_migrate(start_date, end_date):
     else:
         raise MigrationException("Unexpected response {} from {}".format(response.status_code, url))
     # return [{
-        # "reg_no": "100",
-        # "date": "2005-04-13",
-        # "class": "C4"
-    # },{
+        # "reg_no": "1416",
+        # "date": "2002-04-16",
+        # "class": "D2"
+    # }]
+    # return [{ 
         # "reg_no": "100",
         # "date": "2011-10-10",
         # "class": "PAB"

@@ -13,7 +13,7 @@ s = sys.argv[1]
 e = sys.argv[2]
 
 
-cfg = os.getenv('SETTINGS', 'DevelopmentConfig')
+cfg = 'Config'
 c = getattr(importlib.import_module('config'), cfg)
 config = {}
 
