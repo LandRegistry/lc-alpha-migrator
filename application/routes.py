@@ -36,7 +36,7 @@ class MigrationException(RuntimeError):
 
 
 def get_registrations_to_migrate(start_date, end_date):
-    url = app_config['B2B_LEGACY_URL'] + '/land_charges/' + start_date + '/' + end_date
+    url = app_config['LEGACY_ADAPTER_URI'] + '/land_charges/' + start_date + '/' + end_date
     headers = {'Content-Type': 'application/json'}
     logging.info("GET %s", url)
     response = requests.get(url, headers=headers, params={'type': 'NR'})
@@ -64,7 +64,7 @@ def get_registrations_to_migrate(start_date, end_date):
 # TODO: Important! Can we have duplicate rows on T_LC_DOC_INFO with matching reg number and date???
 
 def get_doc_history(reg_no, class_of_charge, date):
-    url = app_config['B2B_LEGACY_URL'] + '/doc_history/' + reg_no
+    url = app_config['LEGACY_ADAPTER_URI'] + '/doc_history/' + reg_no
     headers = {'Content-Type': 'application/json'}
     logging.info("  GET %s?class=%s&date=%s", url, class_without_brackets(class_of_charge), date)
     response = requests.get(url, headers=headers, params={'class': class_without_brackets(class_of_charge), 'date': date})
@@ -80,7 +80,7 @@ def get_doc_history(reg_no, class_of_charge, date):
 
 
 def get_land_charge(reg_no, class_of_charge, date):
-    url = app_config['B2B_LEGACY_URL'] + '/land_charges/' + str(reg_no)
+    url = app_config['LEGACY_ADAPTER_URI'] + '/land_charges/' + str(reg_no)
     headers = {'Content-Type': 'application/json'}
     logging.info('    GET %s?class=%s&date=%s', url, class_of_charge, date)
     response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
@@ -205,7 +205,7 @@ def migrate(config, start, end):
             
             registration_response = insert_data(registration)
             if registration_response.status_code != 200:
-                url = app_config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
+                url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
                 message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
                 logging.error("  " + message)
                 report_error("E", message, "")
@@ -527,7 +527,7 @@ def insert_data(registration):
 
     save_to_file(json_data)
     
-    url = app_config['BANKRUPTCY_DATABASE_API'] + '/migrated_record'
+    url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
     logging.info("  POST %s", url)
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
