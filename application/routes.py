@@ -384,6 +384,9 @@ def build_registration(rows, name_type, name_data):
     
     if county_text == 'BANKS' and coc in ['PA', 'WO', 'DA']: #  Special case for <1% of the data...
         county_text = rows['counties']
+
+    if county_text in ['NO COUNTY', 'NO COUNTIES']:
+        county_text = ''
     
     pty_desc = rows['property']
     parish_district = rows['parish_district']
