@@ -68,7 +68,7 @@ def parse_amend_info(info):
     
 def reformat_county(county):
     known_variations = {
-        'CORNWALL' : 'Cornwall (including Isles of Scilly)'    
+        'DURHAM': 'COUNTY DURHAM'
     }
     
     if county in known_variations:

@@ -132,11 +132,11 @@ def migrate(config, start, end):
     global app_config
     global error_queue
     app_config = config
-    
-    hostname = "amqp://{}:{}@{}:{}".format(app_config['MQ_USERNAME'], app_config['MQ_PASSWORD'],
-                                           app_config['MQ_HOSTNAME'], app_config['MQ_PORT'])
-    connection = kombu.Connection(hostname=hostname)
-    error_queue = connection.SimpleQueue('errors')
+
+    # hostname = "amqp://{}:{}@{}:{}".format(app_config['MQ_USERNAME'], app_config['MQ_PASSWORD'],
+    #                                        app_config['MQ_HOSTNAME'], app_config['MQ_PORT'])
+    # connection = kombu.Connection(hostname=hostname)
+    # error_queue = connection.SimpleQueue('errors')
 
     logging.info('Migration started')
     error_count = 0
@@ -177,7 +177,6 @@ def migrate(config, start, end):
             total_inc_history += len(history)
             for i in history:
                 i['sorted_date'] = datetime.strptime(i['date'], '%Y-%m-%d').date()
-                #i['reg_no'] = int(i['reg_no'])
             
             logging.info("  Chain of length %d found", len(history))
             history.sort(key=operator.itemgetter('sorted_date', 'reg_no'))
@@ -249,7 +248,7 @@ def report_exception(exception):
         "subsystem": app_config["APPLICATION_NAME"]
     }
     # TODO: also report exception.text
-    error_queue.put(error)
+    # error_queue.put(error)
 
 
 def report_error(error_type, message, stack):
@@ -340,22 +339,6 @@ def extract_simple(rows):
 
     
 def build_dummy_row(entry):
-    # registers['registration'] = {
-    # 'registration_no': numeric_reg_no,
-    # 'date': registers['date']
-    # }
-    # registers['class_of_charge'] = registers['class']
-    # registers['application_ref'] = ' '
-    # registers['migration_data'] = {
-    # 'unconverted_reg_no': registers['reg_no'],
-    # 'flags': [],
-    # 'original': {
-    # 'registration_no': registers['orig_number'],
-    # 'date': registers['orig_date'],
-    # 'class': registers['orig_class']
-    # }
-    # }
-    # registers['residence'] = {"text": ""}
     logging.debug('Entry:')
     logging.debug(entry)
     
@@ -462,62 +445,9 @@ def build_registration(rows, name_type, name_data):
             'district': parish_district,
             'description': pty_desc
         }
-    
-    
-    
-    # registration = {
-        # # "class_of_charge": rows['class_type'],
-        # "application_ref": rows['amendment_info'],
-        # #"registration": {
-        # #   "date": rows['registration_date'],
-        # #   "registration_no": rows['registration_no']
-        # #},
-        # #"date": rows['registration_date'],  # TODO: find actual date of appn
-        # "occupation": "",
-        # "residence": {"text": rows['address']},
-        # "migration_data": {
-            # "registration_no": rows['registration_no'],
-            # 'unconverted_reg_no': rows['registration_no'],
-            # 'flags': [],
-            # "extra": {
-                # "occupation": rows['occupation'],
-                # "counties": rows['property_county'].strip(),
-                # "property": rows['property'],
-                # "parish_district": rows['parish_district'],
-                # "priority_notice_ref": rows['priority_notice_ref']
-            # }
-        # }
-    # }
-    
-    
-    
-    
-    
-    #if registration['class_of_charge'] in ['PA(B)', 'WO(B)']:
+
     registration['parties'][0]['names'] = [name_data]
     registration['parties'][0]['names'][0]['type'] = name_type
-    
-    # Add the remaining empty name options
-    # if not 'local' in registration['eo_name']:
-        # registration['eo_name']['local'] = {'name': None, 'area': None}
-    # if not 'company' in registration['eo_name']:    
-        # registration['eo_name']['company'] = None
-    # if not 'other' in registration['eo_name']:
-        # registration['eo_name']['other'] = None
-    # if not 'complex' in registration['eo_name']:
-        # registration['eo_name']['complex'] = {'name': None, 'number': 0}
-    # if not 'private' in registration['eo_name']:
-        # registration['eo_name']['private'] = {'forenames': [], 'surname': ''}
-
-    
-        # if complex_data is None:
-            # registration['eo_name'] = [{"forenames": forenames, "surname": surname}]
-        # else:
-
-            # registration['eo_name'] = [{"forenames": [""], "surname": ""}]       
-    # else:
-        # registration[
-
 
     return registration
 
