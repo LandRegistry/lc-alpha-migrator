@@ -8,7 +8,7 @@ import threading
 import requests
 import operator
 import re
-import time.process_time
+import time
 from datetime import datetime
 from application.utility import convert_class, class_without_brackets, parse_amend_info, save_to_file, reformat_county, \
     extract_authority_name
@@ -39,10 +39,10 @@ class MigrationException(RuntimeError):
 
 
 def get_from_legacy_adapter(url, headers={}, params={}):
-    start = time.process_time()
+    start = time.perf_counter()
     response = requests.get(url, headers=headers, params=params)
     global wait_time_legacydb
-    wait_time_legacydb += time.process_time() - start
+    wait_time_legacydb += time.perf_counter() - start
     return response
 
 
@@ -247,8 +247,8 @@ def migrate(config, start, end):
     logging.info("Total registrations read: %d", total_read)
     logging.info("Total records processed: %d", total_inc_history)
     logging.info("Total errors: %d", error_count)
-    logging.info("Legacy Adapter wait time: %d", wait_time_legacydb)
-    logging.info("Land Charges wait time: %d", wait_time_landcharges)
+    logging.info("Legacy Adapter wait time: %f", wait_time_legacydb)
+    logging.info("Land Charges wait time: %f", wait_time_landcharges)
     
     for line in final_log:
         logging.info(line)
@@ -398,9 +398,12 @@ def build_registration(rows, name_type, name_data):
         occupation = ''
        
     county_text = rows['property_county'].strip()
+    logging.info('    County_text is "%s"', county_text)
     
-    if county_text == 'BANKS' and coc in ['PA', 'WO', 'DA']: #  Special case for <1% of the data...
-        county_text = rows['counties']
+    banks_county = ''
+    if county_text in ['BANKS', ''] and coc in ['PA', 'WO', 'DA']: #  Special case for <1% of the data...
+        banks_county = rows['counties']
+        logging.info('    BANKS county of "%s"', county_text)
 
     if county_text in ['NO COUNTY', 'NO COUNTIES']:
         county_text = ''
@@ -427,7 +430,8 @@ def build_registration(rows, name_type, name_data):
         "migration_data": {
             'unconverted_reg_no': rows['registration_no'],
             'amend_info': rows['amendment_info'],
-            'flags': []
+            'flags': [],
+            'bankruptcy_county': banks_county
         }
     }
     
@@ -480,10 +484,10 @@ def insert_data(registration):
     url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
     logging.info("  POST %s", url)
-    start = time.process_time()
+    start = time.perf_counter()
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
     global wait_time_landcharges
-    wait_time_landcharges += time.process_time() - start
+    wait_time_landcharges += time.perf_counter() - start
     logging.info("  Response: %d", response.status_code)
     
     registration_status_code = response
