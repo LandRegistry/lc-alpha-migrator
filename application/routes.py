@@ -9,7 +9,8 @@ import requests
 import operator
 import re
 from datetime import datetime
-from application.utility import convert_class, class_without_brackets, parse_amend_info, save_to_file, reformat_county
+from application.utility import convert_class, class_without_brackets, parse_amend_info, save_to_file, reformat_county, \
+    extract_authority_name
 
 
 app_config = None
@@ -269,19 +270,19 @@ def extract_data(rows, app_type):
     if data['reverse_name_hex'][-2:] == '01':
         # County council
         logging.info('      EO Name is County Council')
-        registration = build_registration(data, 'County Council', {'local': {'name': data['name'], 'area': '?????'}})        
+        registration = build_registration(data, 'County Council', extract_authority_name(data['name']))
     elif data['reverse_name_hex'][-2:] == '02':
         # Rural council
         logging.info('      EO Name is Rural Council')
-        registration = build_registration(data, 'Rural Council', {'local': {'name': data['name'], 'area': '?????'}})
+        registration = build_registration(data, 'Rural Council', extract_authority_name(data['name']))
     elif data['reverse_name_hex'][-2:] == '04':
         # Parish council
         logging.info('      EO Name is Parish Council')
-        registration = build_registration(data, 'Parish Council', {'local': {'name': data['name'], 'area': '?????'}})
+        registration = build_registration(data, 'Parish Council', extract_authority_name(data['name']))
     elif data['reverse_name_hex'][-2:] == '08':
         # Other council
         logging.info('      EO Name is Other Council')
-        registration = build_registration(data, 'Other Council', {'local': {'name': data['name'], 'area': '?????'}})
+        registration = build_registration(data, 'Other Council', extract_authority_name(data['name']))
     elif data['reverse_name_hex'][-2:] == '16':
         # Dev corp
         logging.info('      EO Name is Development Corporation')

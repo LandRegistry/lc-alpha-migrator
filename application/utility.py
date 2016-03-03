@@ -91,3 +91,18 @@ def save_to_file(data):
     j = json.dumps(data, sort_keys=True, indent=4)
     with open(file, "w+") as txt:
         txt.write(j)
+
+
+def extract_authority_name(eo_name):
+    # Find text surrounded by + signs. That is the area.
+    m = re.search("\+([^\+]+)\+", eo_name)
+
+    result = {
+        "name": "",
+        "area": ""
+    }
+    if m is not None:
+        result['area'] = m.groups()[0]
+
+    result['name'] = re.sub("\+", " ", eo_name).strip()
+    return {'local': result}
