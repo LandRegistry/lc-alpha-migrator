@@ -8,6 +8,7 @@ import threading
 import requests
 import operator
 import re
+import time.process_time
 from datetime import datetime
 from application.utility import convert_class, class_without_brackets, parse_amend_info, save_to_file, reformat_county, \
     extract_authority_name
@@ -16,7 +17,8 @@ from application.utility import convert_class, class_without_brackets, parse_ame
 app_config = None
 final_log = []
 error_queue = None
-
+wait_time_legacydb = 0
+wait_time_landcharges = 0
 
 def is_running():
     threads = [t for t in threading.enumerate() if t.name == 'migrate_thread']
@@ -36,11 +38,20 @@ class MigrationException(RuntimeError):
         self.text = text
 
 
+def get_from_legacy_adapter(url, headers={}, params={}):
+    start = time.process_time()
+    response = requests.get(url, headers=headers, params=params)
+    global wait_time_legacydb
+    wait_time_legacydb += time.process_time() - start
+    return response
+
+
 def get_registrations_to_migrate(start_date, end_date):
     url = app_config['LEGACY_ADAPTER_URI'] + '/land_charges/' + start_date + '/' + end_date
     headers = {'Content-Type': 'application/json'}
     logging.info("GET %s", url)
-    response = requests.get(url, headers=headers, params={'type': 'NR'})
+
+    response = get_from_legacy_adapter(url, headers=headers, params={'type': 'NR'})
     logging.info("Responses: %d", response.status_code)
     
     if response.status_code == 200:
@@ -68,7 +79,7 @@ def get_doc_history(reg_no, class_of_charge, date):
     url = app_config['LEGACY_ADAPTER_URI'] + '/doc_history/' + reg_no
     headers = {'Content-Type': 'application/json'}
     logging.info("  GET %s?class=%s&date=%s", url, class_without_brackets(class_of_charge), date)
-    response = requests.get(url, headers=headers, params={'class': class_without_brackets(class_of_charge), 'date': date})
+    response = get_from_legacy_adapter(url, headers=headers, params={'class': class_without_brackets(class_of_charge), 'date': date})
     logging.info('  Response: %d', response.status_code)
     
     if response.status_code != 200:
@@ -84,7 +95,8 @@ def get_land_charge(reg_no, class_of_charge, date):
     url = app_config['LEGACY_ADAPTER_URI'] + '/land_charges/' + str(reg_no)
     headers = {'Content-Type': 'application/json'}
     logging.info('    GET %s?class=%s&date=%s', url, class_of_charge, date)
-    response = requests.get(url, headers=headers, params={'class': class_of_charge, 'date': date})
+    response = get_from_legacy_adapter(url, headers=headers, params={'class': class_of_charge, 'date': date})
+
     logging.info('    Response: %d', response.status_code)
     if response.status_code == 200:
         return response.json()
@@ -228,10 +240,15 @@ def migrate(config, start, end):
             report_exception(e)
             error_count += 1
 
+    global wait_time_landcharges
+    global wait_time_legacydb
+
     logging.info('Migration complete')
     logging.info("Total registrations read: %d", total_read)
     logging.info("Total records processed: %d", total_inc_history)
     logging.info("Total errors: %d", error_count)
+    logging.info("Legacy Adapter wait time: %d", wait_time_legacydb)
+    logging.info("Land Charges wait time: %d", wait_time_landcharges)
     
     for line in final_log:
         logging.info(line)
@@ -368,7 +385,6 @@ def build_dummy_row(entry):
     return entry
 
 
-
 def build_registration(rows, name_type, name_data):
     logging.debug('Head Entry:')
     logging.debug(json.dumps(rows))
@@ -464,7 +480,10 @@ def insert_data(registration):
     url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
     headers = {'Content-Type': 'application/json'}
     logging.info("  POST %s", url)
+    start = time.process_time()
     response = requests.post(url, data=json.dumps(json_data), headers=headers)
+    global wait_time_landcharges
+    wait_time_landcharges += time.process_time() - start
     logging.info("  Response: %d", response.status_code)
     
     registration_status_code = response
@@ -479,28 +498,5 @@ def hex_translator(hex_code):
     length = code_int & mask
     punc_code = code_int >> 5
     punctuation = ['&', ' ', '-', "'", '(', ')', '*']
-    
-    # compare_bit = 0x1F
-    # compare_int = int(compare_bit)
-    # myint = int(hex_code, 16)
-    # int_3 = myint >> 5
-    # bit_3 = bin(int_3)
-    # diff = compare_int & myint
-    # diff_bit = (bin(diff))
-    # dec_5 = int(diff_bit, 2)
-    # punctuation = {
-        # "0b1": " ",
-        # "0b10": "-",
-        # "0b11": "'",
-        # "0b100": "(",
-        # "0b101": ")",
-        # "0b110": "*",
-        # "0b0": "&"
-    # }
-
-    #return punctuation[str(bit_3)], dec_5
     return punctuation[punc_code], length
-
-
-
 
