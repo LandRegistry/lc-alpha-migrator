@@ -203,7 +203,8 @@ def migrate(config, start, end):
                              registers['date'])
 
                 numeric_reg_no = int(re.sub("/", "", registers['reg_no'])) # TODO: is this safe?
-                land_charges = get_land_charge(numeric_reg_no, registers['class'], registers['date'])
+                land_charges = registers['land_charge']
+                    #get_land_charge(numeric_reg_no, registers['class'], registers['date'])
                 
                 if land_charges is not None and len(land_charges) > 0:
                     registration.append(extract_data(land_charges, registers['type']))
