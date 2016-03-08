@@ -314,7 +314,7 @@ def extract_data(rows, app_type):
         registration = build_registration(data, 'Other', {'other': data['name']})
     elif data['reverse_name_hex'][-2:] == 'F3' and data['reverse_name_hex'][0:2] == 'F9':
         logging.info('      EO Name is Complex Name')
-        registration = build_registration(data, 'Complex Name', {'complex': {'name': data['name'], 'number': int(data['reverse_name'][2:8], 16)}})
+        registration = build_registration(data, 'Complex Name', {'complex': {'name': data['name'], 'number': int(data['reverse_name_hex'][2:8], 16)}})
     else:    
         # Mundane name
         logging.info('      EO Name is Simple')
