@@ -202,7 +202,7 @@ def migrate(config, start, end):
                 logging.info("    Historical record %s %s %s", registers['class'], registers['reg_no'],
                              registers['date'])
 
-                numeric_reg_no = int(re.sub("/", "", registers['reg_no'])) # TODO: is this safe?
+                numeric_reg_no = int(re.sub("/", "", registers['reg_no']))  # TODO: is this safe?
                 land_charges = get_land_charge(numeric_reg_no, registers['class'], registers['date'])
                 
                 if land_charges is not None and len(land_charges) > 0:
