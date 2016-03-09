@@ -74,6 +74,9 @@ def reformat_county(county):
     if county in known_variations:
         county = known_variations[county]
 
+    # The lookup tables use the non-hyphenated variant
+    county = re.sub("\-", " ", county)
+
     match = re.match(r"CITY OF (.*)", county)
     if match is not None:
         c = match.group(1)
