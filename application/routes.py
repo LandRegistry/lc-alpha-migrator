@@ -196,6 +196,7 @@ def migrate(config, start, end):
             logging.info("  Chain of length %d found", len(history))
             history.sort(key=operator.itemgetter('sorted_date', 'reg_no'))
 
+            this_register = []
             for x, registers in enumerate(history):
                 registers['class'] = convert_class(registers['class'])
 
@@ -208,43 +209,47 @@ def migrate(config, start, end):
                     #get_land_charge(numeric_reg_no, registers['class'], registers['date'])
                
                 if land_charges is not None and len(land_charges) > 0:
-                    registrations.append(extract_data(land_charges, registers['type']))
+                    record = extract_data(land_charges, registers['type'])
+                    registrations.append(record)
+                    this_register.append(record)
                     #registration[x]['reg_no'] = numeric_reg_no
                     
                 else:
-                    registrations.append(build_dummy_row(registers))
+                    record = build_dummy_row(registers)
+                    registrations.append(record)
+                    this_register.append(record)
 
-            flag_oddities(registrations)
+            flag_oddities(this_register)
 
-            if len(registrations > 10):
+            if len(registrations) > 10:
                 registration_response = insert_data(registrations)
                 registrations = []
 
-            if registration_response.status_code != 200:
-                url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
-                message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
-                logging.debug(registration_response.text)
-                logging.error("  " + message)
-                report_error("E", message, "")
-                logging.error(registration_response.text)
+                if registration_response.status_code != 200:
+                    url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
+                    message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
+                    logging.debug(registration_response.text)
+                    logging.error("  " + message)
+                    report_error("E", message, "")
+                    logging.error(registration_response.text)
 
-                logging.error("Rows:")
-                logging.error(rows)
-                logging.error("Registration:")
-                logging.error(registrations)
-                error_count += 1
-                item = registrations[0]
-                final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
-            else:
-                reg_data = registration_response.json()
-                for item in reg_data:
-                    message = "Failed to migrate {} of {} ({}): {}".format(
-                        item['number'], item['date'], item['class_of_charge'], item['date']
-                    )
-                    final_log.append(message)
-                    logging.error(message)
+                    logging.error("Rows:")
+                    logging.error(rows)
+                    logging.error("Registration:")
+                    logging.error(registrations)
+                    error_count += 1
+                    item = registrations[0]
+                    final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
+                else:
+                    reg_data = registration_response.json()
+                    for item in reg_data:
+                        message = "Failed to migrate {} of {} ({}): {}".format(
+                            item['number'], item['date'], item['class_of_charge'], item['date']
+                        )
+                        final_log.append(message)
+                        logging.error(message)
 
-                log_item_summary(registrations)
+                    log_item_summary(registrations)
                 
             #final_log.append
         except Exception as e:
@@ -254,7 +259,36 @@ def migrate(config, start, end):
             error_count += 1
 
     # End of main loop
+    # TODO: repeated code
+    if len(registrations) > 0:
+        registration_response = insert_data(registrations)
+        registrations = []
 
+        if registration_response.status_code != 200:
+            url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
+            message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
+            logging.debug(registration_response.text)
+            logging.error("  " + message)
+            report_error("E", message, "")
+            logging.error(registration_response.text)
+
+            logging.error("Rows:")
+            logging.error(rows)
+            logging.error("Registration:")
+            logging.error(registrations)
+            error_count += 1
+            item = registrations[0]
+            final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
+        else:
+            reg_data = registration_response.json()
+            for item in reg_data:
+                message = "Failed to migrate {} of {} ({}): {}".format(
+                    item['number'], item['date'], item['class_of_charge'], item['date']
+                )
+                final_log.append(message)
+                logging.error(message)
+
+            log_item_summary(registrations)
 
 
     global wait_time_landcharges
