@@ -353,7 +353,7 @@ def extract_data(rows, app_type):
         # Other council
         logging.info('      EO Name is Other Council')
         registration = build_registration(data, 'Other Council', extract_authority_name(data['name']))
-    elif data['reverse_name_hex'][-2:] == '16':
+    elif data['reverse_name_hex'][-2:] == '10':
         # Dev corp
         logging.info('      EO Name is Development Corporation')
         registration = build_registration(data, 'Development Corporation', {'other': data['name']})
