@@ -7,7 +7,6 @@
 # On registration we create a 'searchable name key' and store that (indexed) in the database
 # This is similar but not identical to the key used by the legacy system. It can easily be
 # converted (by Synchroniser) to *be* identical to the legacy key
-from application import app
 import re
 import psycopg2
 
@@ -91,19 +90,6 @@ LA_NON_KEY_WORDS = ['AND', '&', 'AT', 'BY', 'CITY', 'CUM', 'DE', 'DU', 'EN', 'IN
 B_INDICATORS = ['BOARD OF']
 
 
-
-# TODO: remove this once we pass a cursor in
-def connect(cursor_factory=None):
-    connection = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(
-        app.config['DATABASE_NAME'], app.config['DATABASE_USER'], app.config['DATABASE_HOST'],
-        app.config['DATABASE_PASSWORD']))
-    return connection.cursor(cursor_factory=cursor_factory)
-
-
-def complete(cursor):
-    cursor.connection.commit()
-    cursor.close()
-    cursor.connection.close()
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 

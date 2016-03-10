@@ -258,33 +258,17 @@ def migrate(config, start, end):
     # End of main loop
     # TODO: repeated code
     if len(registrations) > 0:
-        registration_response = insert_data(registrations)
+        registration_failures = migrate_record(config, registrations)
         registrations = []
 
-        if registration_response.status_code != 200:
-            url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
-            message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
-            logging.debug(registration_response.text)
-            logging.error("  " + message)
-            report_error("E", message, "")
-            logging.error(registration_response.text)
-
-            logging.error("Rows:")
-            logging.error(rows)
-            logging.error("Registration:")
-            logging.error(registrations)
-            error_count += 1
-            item = registrations[0]
-            final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
+        if len(registration_failures) > 0:
+            logging.error('Failed migrations:')
+            for fail in registration_failures:
+                logging.error("Registration {} of {}".format(fail['number'], fail['date']))
+                logging.error(fail['message'])
+                error_count += 1
+                final_log.append('Failed to migrate ' + fail["date"] + "/" + str(fail['number']))
         else:
-            reg_data = registration_response.json()
-            for item in reg_data:
-                message = "Failed to migrate {} of {} ({}): {}".format(
-                    item['number'], item['date'], item['class_of_charge'], item['date']
-                )
-                final_log.append(message)
-                logging.error(message)
-
             log_item_summary(registrations)
 
 
@@ -526,24 +510,24 @@ def build_registration(rows, name_type, name_data):
     return registration
 
 
-def insert_data(registration):
-    json_data = registration
+# def insert_data(registration):
+    # json_data = registration
 
-    save_to_file(json_data)
+    # save_to_file(json_data)
     
-    url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
-    headers = {'Content-Type': 'application/json'}
-    logging.info("  POST %s", url)
-    start = time.perf_counter()
-    response = requests.post(url, data=json.dumps(json_data), headers=headers)
-    global wait_time_landcharges
-    wait_time_landcharges += time.perf_counter() - start
-    logging.info("  Response: %d", response.status_code)
+    # url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
+    # headers = {'Content-Type': 'application/json'}
+    # logging.info("  POST %s", url)
+    # start = time.perf_counter()
+    # response = requests.post(url, data=json.dumps(json_data), headers=headers)
+    # global wait_time_landcharges
+    # wait_time_landcharges += time.perf_counter() - start
+    # logging.info("  Response: %d", response.status_code)
     
-    registration_status_code = response
-    # add code below to force errors
-    # registration_status_code = 500
-    return registration_status_code
+    # registration_status_code = response
+    # # add code below to force errors
+    # # registration_status_code = 500
+    # return registration_status_code
 
 
 def hex_translator(hex_code):
