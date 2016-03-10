@@ -1,6 +1,4 @@
-#from application import app, error_queue
-from flask import Response, request
-import kombu
+from application.data import migrate_record
 import json
 import logging
 import traceback
@@ -19,17 +17,6 @@ final_log = []
 error_queue = None
 wait_time_legacydb = 0
 wait_time_landcharges = 0
-
-def is_running():
-    threads = [t for t in threading.enumerate() if t.name == 'migrate_thread']
-    s = True if len(threads) > 0 and threads[0].is_alive() else False
-    return s
-
-
-def start_migration():
-    t = threading.Thread(name='migrate_thread', target=migration_thread)
-    t.daemon = False
-    t.start()
 
 
 class MigrationException(RuntimeError):
@@ -222,35 +209,45 @@ def migrate(config, start, end):
             flag_oddities(this_register)
 
             if len(registrations) > 10:
-                registration_response = insert_data(registrations)
+                registration_failures = migrate_record(config, registrations)
                 registrations = []
 
-                if registration_response.status_code != 200:
-                    url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
-                    message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
-                    logging.debug(registration_response.text)
-                    logging.error("  " + message)
-                    report_error("E", message, "")
-                    logging.error(registration_response.text)
-
-                    logging.error("Rows:")
-                    logging.error(rows)
-                    logging.error("Registration:")
-                    logging.error(registrations)
-                    error_count += 1
-                    item = registrations[0]
-                    final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
+                if len(registration_failures) > 0:
+                    logging.error('Failed migrations:')
+                    for fail in registration_failures:
+                        logging.error("Registration {} of {}".format(fail['number'], fail['date']))
+                        logging.error(fail['message'])
+                        error_count += 1
+                        final_log.append('Failed to migrate ' + fail["date"] + "/" + str(fail['number']))
                 else:
-                    reg_data = registration_response.json()
-                    for item in reg_data:
-                        message = "Failed to migrate {} of {} ({}): {}".format(
-                            item['number'], item['date'], item['class_of_charge'], item['date']
-                        )
-                        final_log.append(message)
-                        logging.error(message)
-
                     log_item_summary(registrations)
-                
+
+                # if registration_response.status_code != 200:
+                #     url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
+                #     message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
+                #     logging.debug(registration_response.text)
+                #     logging.error("  " + message)
+                #     report_error("E", message, "")
+                #     logging.error(registration_response.text)
+                #
+                #     logging.error("Rows:")
+                #     logging.error(rows)
+                #     logging.error("Registration:")
+                #     logging.error(registrations)
+                #     error_count += 1
+                #     item = registrations[0]
+                #     final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
+                # else:
+                #     reg_data = registration_response.json()
+                #     for item in reg_data:
+                #         message = "Failed to migrate {} of {} ({}): {}".format(
+                #             item['number'], item['date'], item['class_of_charge'], item['date']
+                #         )
+                #         final_log.append(message)
+                #         logging.error(message)
+                #
+                #     # log_item_summary(registrations)
+                #
             #final_log.append
         except Exception as e:
             logging.error('Unhandled exception: %s', str(e))

@@ -11,3 +11,7 @@ class Config(object):
     #LEGACY_ADAPTER_URI = os.getenv('LEGACY_ADAPTER_URL', 'http://10.0.2.2:15007')
     LEGACY_ADAPTER_URI = os.getenv('LEGACY_ADAPTER_URL', 'http://localhost:5007')
     LAND_CHARGES_URI = os.getenv('LAND_CHARGES_URL', 'http://localhost:5004')
+    DATABASE_NAME = os.getenv('DATABASE_NAME', 'landcharges')
+    DATABASE_USER = os.getenv('DATABASE_USER', 'landcharges')
+    DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', 'lcalpha')
+    DATABASE_HOST = os.getenv('DATABASE_HOST', 'localhost')
