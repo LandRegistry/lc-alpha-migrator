@@ -135,7 +135,7 @@ def insert_bankruptcy_regn(cursor, details_id, names, date, orig_reg_no):
                     'date': date,
                     'name': name['name']
                 })
-    return reg_nos
+    return reg_nos, reg_id
 
 
 def insert_landcharge_regn(cursor, details_id, names, county_ids, date, orig_reg_no):
@@ -173,7 +173,7 @@ def insert_landcharge_regn(cursor, details_id, names, county_ids, date, orig_reg
                 'county': county['name'],
             })
 
-    return reg_nos
+    return reg_nos, reg_id
 
 
 def insert_counties(cursor, details_id, counties):
@@ -451,13 +451,13 @@ def insert_record(cursor, data, request_id, date, amends=None, orig_reg_no=None)
     names, register_details_id = insert_details(cursor, request_id, data, date, amends)
 
     if data['class_of_charge'] in ['PAB', 'WOB']:
-        reg_nos = insert_bankruptcy_regn(cursor, register_details_id, names, date, orig_reg_no)
+        reg_nos, reg_id = insert_bankruptcy_regn(cursor, register_details_id, names, date, orig_reg_no)
     else:
         county_ids = insert_counties(cursor, register_details_id, data['particulars']['counties'])
-        reg_nos = insert_landcharge_regn(cursor, register_details_id, names, county_ids, date, orig_reg_no)
+        reg_nos, reg_id = insert_landcharge_regn(cursor, register_details_id, names, county_ids, date, orig_reg_no)
 
     # TODO: audit-log not done. Not sure it belongs here?
-    return reg_nos, register_details_id
+    return reg_nos, register_details_id, reg_id
 
 
 def insert_request(cursor, applicant, application_type, date, original_data=None):
@@ -486,22 +486,25 @@ def mark_as_no_reveal(cursor, reg_no, date):
     })
 
 
+def insert_migration_status(cursor, register_id, registration_number, registration_date, class_of_charge,
+                            additional_data):
+    cursor.execute("INSERT INTO migration_status (register_id, original_regn_no, date, class_of_charge, "
+                   "migration_complete, extra_data ) "
+                   "VALUES( %(register_id)s, %(reg_no)s, %(date)s, %(class)s, True, %(extra)s ) RETURNING id",
+                   {
+                       "register_id": register_id,
+                       "reg_no": registration_number,
+                       "date": registration_date,
+                       "class": class_of_charge,
+                       "extra": json.dumps(additional_data)
+                   })
+    return cursor.fetchone()[0]
+
+
 def insert_migrated_record(cursor, data):
     data["class_of_charge"] = re.sub(r"\(|\)", "", data["class_of_charge"])
 
     # TODO: using registration date as request date. Valid? Always?
-
-    logging.debug(data)
-    # if data['type'] in ['CN']:  # TODO: remove this leg
-    #
-    #     data['customer_name'] = ''
-    #     data['customer_address'] = ''
-    #     insert_cancellation(data['migration_data']['original']['registration_no'],
-    #                         data['migration_data']['original']['date'], data)
-    #     registration_id = None
-    #     details_id = None
-    #     request_id = None
-    # else:
     types = {
         'NR': 'New registration',
         'AM': 'Amendment',
@@ -513,15 +516,21 @@ def insert_migrated_record(cursor, data):
     }
     type_str = types[data['type']]
 
-    # def insert_request(cursor, applicant, application_type, date, original_data=None):
     request_id = insert_request(cursor, data['applicant'], type_str, data['registration']['date'], None)
 
-    reg_nos, details_id = insert_record(cursor, data, request_id, data['registration']['date'], None,
-                                        data['registration']['registration_no'])
+    reg_nos, details_id, reg_id = insert_record(cursor, data, request_id, data['registration']['date'], None,
+                                                data['registration']['registration_no'])
 
     if len(data['parties']) == 0:
         # There was no row on the original index, so by definition is cannot be revealed
         mark_as_no_reveal(cursor, data['registration']['registration_no'], data['registration']['date'])
+
+    insert_migration_status(cursor,
+                            reg_id,
+                            data['migration_data']['unconverted_reg_no'],
+                            data['registration']['date'],
+                            data['class_of_charge'],
+                            data['migration_data'])
 
     return details_id, request_id
 
