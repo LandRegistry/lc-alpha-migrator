@@ -111,8 +111,8 @@ def flag_oddities(data):
     # There aren't many circumstances when we can't migrate something - often source data consists only
     # of registration number, date and class of charge (i.e. rest of the data is in the form image)
     # Flag the oddities up anyway so we can check out any data quality issues
-    logging.debug("Data:")
-    logging.debug(data)
+    # logging.debug("Data:")
+    # logging.debug(data)
     if data[0]['type'] != 'NR':
         add_flag(data, "Does not start with NR")
 
@@ -192,7 +192,7 @@ def migrate(config, start, end):
         cdate += timedelta(days=1)
         for history in day_regs:
             # Reg is equivalend to history...
-            logging.debug(history)
+            # logging.debug(history)
             try:
     
 
@@ -235,18 +235,18 @@ def migrate(config, start, end):
                    
                     if land_charges is not None and len(land_charges) > 0:
                         record = extract_data(land_charges, registers['type'])
-                        registrations.append(record)
+                        #registrations.append(record)
                         this_register.append(record)
                         #registration[x]['reg_no'] = numeric_reg_no
                         
                     else:
                         record = build_dummy_row(registers)
-                        registrations.append(record)
+                        #registrations.append(record)
                         this_register.append(record)
 
                 flag_oddities(this_register)
                 wait_time_manipulation += time.perf_counter() - start
-                
+                registrations.append(this_register)
 
                 if len(registrations) > 20:
                     registration_failures = insert_record_to_db(config, registrations)
@@ -418,8 +418,8 @@ def extract_simple(rows):
 
     
 def build_dummy_row(entry):
-    logging.debug('Entry:')
-    logging.debug(entry)
+    # logging.debug('Entry:')
+    # logging.debug(entry)
     
     entry = {
         "registration": {
@@ -447,8 +447,8 @@ def build_dummy_row(entry):
 
 
 def build_registration(rows, name_type, name_data):
-    logging.debug('Head Entry:')
-    logging.debug(json.dumps(rows))
+    # logging.debug('Head Entry:')
+    # logging.debug(json.dumps(rows))
     
     coc = class_without_brackets(rows['class_type'])
     if coc in ['PAB', 'WOB']:
