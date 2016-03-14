@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import math
 from log.logger import setup_logging
 import importlib
+import os
 from application.routes import migrate
 from multiprocessing import Process
 
@@ -30,30 +31,30 @@ sd = datetime.fromtimestamp(time.mktime(time.strptime(s, '%Y-%m-%d')))
 ed = datetime.fromtimestamp(time.mktime(time.strptime(e, '%Y-%m-%d')))
 days = (ed - sd).days
 
-day_slice = math.floor(days / 4)
+# Slightly buggy: this will slice to a minimum of 1 day, so if there are too many slices it'll increase the width
+# of the range.
+slices = int(os.getenv("MIGRATOR_WORKERS", '8'))
+day_slice = math.floor(days / slices)
 
-r1s = sd
-r1e = (sd + timedelta(days=day_slice))
+ranges = []  # {start: x, end: y}
+for x in range(0, slices):
+    if x == 0:
+        start = sd
+    else:
+        start = ranges[x - 1]['end'] + timedelta(days=1)
 
-r2s = r1e + timedelta(days=1)
-r2e = r2s + timedelta(days=day_slice)
+    if x == 7:
+        end = ed
+    else:
+        end = start + timedelta(days=day_slice)
 
-r3s = r2e + timedelta(days=1)
-r3e = r3s + timedelta(days=day_slice)
+    ranges.append({
+        'start': start,
+        'end': end
+    })
 
-r4s = r3e + timedelta(days=1)
-r4e = ed
+for r in ranges:
+    print("{} -> {}".format(r['start'], r['end']))
 
-print("{} -> {}".format(r1s.strftime('%Y-%m-%d'), r1e.strftime('%Y-%m-%d')))
-print("{} -> {}".format(r2s.strftime('%Y-%m-%d'), r2e.strftime('%Y-%m-%d')))
-print("{} -> {}".format(r3s.strftime('%Y-%m-%d'), r3e.strftime('%Y-%m-%d')))
-print("{} -> {}".format(r4s.strftime('%Y-%m-%d'), r4e.strftime('%Y-%m-%d')))
-
-p1 = Process(target=migrate, args=(config, r1s.strftime('%Y-%m-%d'), r1e.strftime('%Y-%m-%d')))
-p2 = Process(target=migrate, args=(config, r2s.strftime('%Y-%m-%d'), r2e.strftime('%Y-%m-%d')))
-p3 = Process(target=migrate, args=(config, r3s.strftime('%Y-%m-%d'), r3e.strftime('%Y-%m-%d')))
-p4 = Process(target=migrate, args=(config, r4s.strftime('%Y-%m-%d'), r4e.strftime('%Y-%m-%d')))
-p1.start()
-p2.start()
-p3.start()
-p4.start()
+for r in ranges:
+    p = Process(target=migrate, args=(config, r['start'].strftime('%Y-%m-%d'), r['end'].strftime('%Y-%m-%d')))
