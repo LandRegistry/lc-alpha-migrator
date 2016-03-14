@@ -7,7 +7,8 @@ import requests
 import operator
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 from application.utility import convert_class, class_without_brackets, parse_amend_info, save_to_file, reformat_county, \
     extract_authority_name
 
@@ -16,8 +17,10 @@ app_config = None
 final_log = []
 error_queue = None
 wait_time_legacydb = 0
-wait_time_landcharges = 0
-
+wait_time_sqlinsert = 0
+wait_time_manipulation = 0
+call_count_legacy_db = 0
+legacy_db_ttfb = 0
 
 class MigrationException(RuntimeError):
     def __init__(self, message, text=None):
@@ -29,7 +32,12 @@ def get_from_legacy_adapter(url, headers={}, params={}):
     start = time.perf_counter()
     response = requests.get(url, headers=headers, params=params)
     global wait_time_legacydb
+    global call_count_legacy_db
+    global legacy_db_ttfb
     wait_time_legacydb += time.perf_counter() - start
+    legacy_db_ttfb += response.elapsed.total_seconds()
+    
+    call_count_legacy_db += 1
     return response
 
 
@@ -139,126 +147,131 @@ def migrate(config, start, end):
     # error_queue = connection.SimpleQueue('errors')
 
     logging.info('Migration started')
+    total_start = time.perf_counter()
+    
+    
+    
     error_count = 0
     # Get all the registration numbers that need to be migrated
 
-    try:
-        reg_data = get_registrations_to_migrate(start, end)
-        if not isinstance(reg_data, list):
-            msg = "Registration data is not a list:"
-            logging.error(msg)
-            logging.error(reg_data)
-            report_error("E", msg, json.dumps(reg_data))
-            return
+    # start_time = time.perf_counter()
+    # try:
+        # reg_data = get_registrations_to_migrate(start, end)
+        # if not isinstance(reg_data, list):
+            # msg = "Registration data is not a list:"
+            # logging.error(msg)
+            # logging.error(reg_data)
+            # report_error("E", msg, json.dumps(reg_data))
+            # return
 
-        total_read = len(reg_data)
-        logging.info("Retrieved %d items from /land_charges", total_read)
+        # total_read = len(reg_data)
+        # logging.info("Retrieved %d items from /land_charges", total_read)
 
-    except Exception as e:
-        logging.error('Unhandled exception: %s', str(e))
-        report_exception(e)
-        raise
-
+    # except Exception as e:
+        # logging.error('Unhandled exception: %s', str(e))
+        # report_exception(e)
+        # raise
+    # wait_time_get_regs = time.perf_counter() - start_time
+    wait_time_get_regs = 0
     total_inc_history = 0
+    total_read = 0
     registrations = []
+    
+    cdate = datetime.fromtimestamp(time.mktime(time.strptime(start, '%Y-%m-%d')))
+    edate = datetime.fromtimestamp(time.mktime(time.strptime(end, '%Y-%m-%d')))
+    while cdate <= edate:
+        logging.info("Process %s", cdate.strftime('%Y-%m-%d'))
+        
+        get_start = time.perf_counter()
+        url = app_config['LEGACY_ADAPTER_URI'] + '/land_charges_data/' + cdate.strftime('%Y-%m-%d')
+        headers = {'Content-Type': 'application/json'}
+        day_regs = get_from_legacy_adapter(url, headers=headers).json()
+        total_read += len(day_regs)
+        wait_time_get_regs += get_start - time.perf_counter()
+        
+        cdate += timedelta(days=1)
+        for history in day_regs:
+            # Reg is equivalend to history...
+            logging.debug(history)
+            try:
+    
 
-    for rows in reg_data:
-        try:
-            # For each registration number returned, get history of that application.
-            logging.info("------------------------------------------------------------------")
-            rows['class'] = rows['class'].strip()
-            rows['reg_no'] = rows['reg_no'].strip()
-            rows['date'] = rows['date'].strip()
-            logging.info("Process %s %s/%s", rows['class'], rows['date'], rows['reg_no'])
+                # for rows in reg_data:
+                # try:
+                # #For each registration number returned, get history of that application.
+                # logging.info("------------------------------------------------------------------")
+                # rows['class'] = rows['class'].strip()
+                # rows['reg_no'] = rows['reg_no'].strip()
+                # rows['date'] = rows['date'].strip()
+                # logging.info("Process %s %s/%s", rows['class'], rows['date'], rows['reg_no'])
 
-            history = get_doc_history(rows['reg_no'], rows['class'], rows['date'])
-            if history is None or len(history) == 0:
-                logging.error("  No document history information found") # TODO: need a bucket of these
-                continue
+                # history = get_doc_history(rows['reg_no'], rows['class'], rows['date'])
+                
+                start = time.perf_counter()
+                global wait_time_manipulation
+                
+                if history is None or len(history) == 0:
+                    logging.error("  No document history information found") # TODO: need a bucket of these
+                    continue
 
-            total_inc_history += len(history)
-            for i in history:
-                i['sorted_date'] = datetime.strptime(i['date'], '%Y-%m-%d').date()
-            
-            logging.info("  Chain of length %d found", len(history))
-            history.sort(key=operator.itemgetter('sorted_date', 'reg_no'))
+                total_inc_history += len(history)
+                for i in history:
+                    i['sorted_date'] = datetime.strptime(i['date'], '%Y-%m-%d').date()
+                
+                logging.info("  Chain of length %d found", len(history))
+                history.sort(key=operator.itemgetter('sorted_date', 'reg_no'))
 
-            this_register = []
-            for x, registers in enumerate(history):
-                registers['class'] = convert_class(registers['class'])
+                this_register = []
+                for x, registers in enumerate(history):
+                    registers['class'] = convert_class(registers['class'])
 
-                logging.info("    Historical record %s %s %s", registers['class'], registers['reg_no'],
-                             registers['date'])
+                    logging.info("    Historical record %s %s %s", registers['class'], registers['reg_no'],
+                                 registers['date'])
 
 
-                #numeric_reg_no = int(re.sub("/", "", registers['reg_no'])) # TODO: is this safe?
-                land_charges = registers['land_charge']
-                    #get_land_charge(numeric_reg_no, registers['class'], registers['date'])
-               
-                if land_charges is not None and len(land_charges) > 0:
-                    record = extract_data(land_charges, registers['type'])
-                    registrations.append(record)
-                    this_register.append(record)
-                    #registration[x]['reg_no'] = numeric_reg_no
-                    
-                else:
-                    record = build_dummy_row(registers)
-                    registrations.append(record)
-                    this_register.append(record)
+                    #numeric_reg_no = int(re.sub("/", "", registers['reg_no'])) # TODO: is this safe?
+                    land_charges = registers['land_charge']
+                        #get_land_charge(numeric_reg_no, registers['class'], registers['date'])
+                   
+                    if land_charges is not None and len(land_charges) > 0:
+                        record = extract_data(land_charges, registers['type'])
+                        registrations.append(record)
+                        this_register.append(record)
+                        #registration[x]['reg_no'] = numeric_reg_no
+                        
+                    else:
+                        record = build_dummy_row(registers)
+                        registrations.append(record)
+                        this_register.append(record)
 
-            flag_oddities(this_register)
+                flag_oddities(this_register)
+                wait_time_manipulation += time.perf_counter() - start
+                
 
-            if len(registrations) > 10:
-                registration_failures = migrate_record(config, registrations)
-                registrations = []
+                if len(registrations) > 20:
+                    registration_failures = insert_record_to_db(config, registrations)
+                    registrations = []
 
-                if len(registration_failures) > 0:
-                    logging.error('Failed migrations:')
-                    for fail in registration_failures:
-                        logging.error("Registration {} of {}".format(fail['number'], fail['date']))
-                        logging.error(fail['message'])
-                        error_count += 1
-                        final_log.append('Failed to migrate ' + fail["date"] + "/" + str(fail['number']))
-                else:
-                    log_item_summary(registrations)
+                    if len(registration_failures) > 0:
+                        logging.error('Failed migrations:')
+                        for fail in registration_failures:
+                            logging.error("Registration {} of {}".format(fail['number'], fail['date']))
+                            logging.error(fail['message'])
+                            error_count += 1
+                            final_log.append('Failed to migrate ' + fail["date"] + "/" + str(fail['number']))
+                    else:
+                        log_item_summary(registrations)
 
-                # if registration_response.status_code != 200:
-                #     url = app_config['LAND_CHARGES_URI'] + '/migrated_record'
-                #     message = "Unexpected {} return code for POST {}".format(registration_response.status_code, url)
-                #     logging.debug(registration_response.text)
-                #     logging.error("  " + message)
-                #     report_error("E", message, "")
-                #     logging.error(registration_response.text)
-                #
-                #     logging.error("Rows:")
-                #     logging.error(rows)
-                #     logging.error("Registration:")
-                #     logging.error(registrations)
-                #     error_count += 1
-                #     item = registrations[0]
-                #     final_log.append('Failed to migrate ' + item['registration']["date"] + "/" + str(item['registration']['registration_no']))
-                # else:
-                #     reg_data = registration_response.json()
-                #     for item in reg_data:
-                #         message = "Failed to migrate {} of {} ({}): {}".format(
-                #             item['number'], item['date'], item['class_of_charge'], item['date']
-                #         )
-                #         final_log.append(message)
-                #         logging.error(message)
-                #
-                #     # log_item_summary(registrations)
-                #
-            #final_log.append
-        except Exception as e:
-            logging.error('Unhandled exception: %s', str(e))
-            logging.error('Failed to migrate  %s %s %s', rows['class'], rows['reg_no'], rows['date'])
-            report_exception(e)
-            error_count += 1
+            except Exception as e:
+                logging.error('Unhandled exception: %s', str(e))
+                logging.error('Failed to migrate  %s %s %s', history[0]['class'], history[0]['reg_no'], history[0]['date'])
+                report_exception(e)
+                error_count += 1
 
     # End of main loop
     # TODO: repeated code
     if len(registrations) > 0:
-        registration_failures = migrate_record(config, registrations)
+        registration_failures = insert_record_to_db(config, registrations)
         registrations = []
 
         if len(registration_failures) > 0:
@@ -272,20 +285,34 @@ def migrate(config, start, end):
             log_item_summary(registrations)
 
 
-    global wait_time_landcharges
+    
     global wait_time_legacydb
+    global legacy_db_ttfb
+    total_time = time.perf_counter() - total_start
 
     logging.info('Migration complete')
     logging.info("Total registrations read: %d", total_read)
     logging.info("Total records processed: %d", total_inc_history)
     logging.info("Total errors: %d", error_count)
-    logging.info("Legacy Adapter wait time: %f", wait_time_legacydb)
-    logging.info("Land Charges wait time: %f", wait_time_landcharges)
+    logging.info("Legacy Adapter wait time: %f (%d calls)", wait_time_legacydb, call_count_legacy_db)
+    logging.info("Legacy Adapter cumulative TTFB: %f", legacy_db_ttfb)
+    #logging.info("Startup wait time: %f", wait_time_get_regs)
+    logging.info("SQL Insert wait time: %f", wait_time_sqlinsert)
+    logging.info("Data Mangling wait time: %f", wait_time_manipulation)
+    logging.info("Total run time: %f", total_time)
     
     for line in final_log:
         logging.info(line)
 
+    
+def insert_record_to_db(config, data):
+    start = time.perf_counter()
+    failures = migrate_record(config, data)
+    global wait_time_sqlinsert
+    wait_time_sqlinsert += time.perf_counter() - start
+    return failures
 
+        
 def report_exception(exception):
     global error_queue
     call_stack = traceback.format_exc()
