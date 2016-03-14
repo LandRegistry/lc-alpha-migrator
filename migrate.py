@@ -58,3 +58,4 @@ for r in ranges:
 
 for r in ranges:
     p = Process(target=migrate, args=(config, r['start'].strftime('%Y-%m-%d'), r['end'].strftime('%Y-%m-%d')))
+    p.start()
