@@ -43,7 +43,7 @@ for x in range(0, slices):
     else:
         start = ranges[x - 1]['end'] + timedelta(days=1)
 
-    if x == 7:
+    if x == slices - 1:
         end = ed
     else:
         end = start + timedelta(days=day_slice)
