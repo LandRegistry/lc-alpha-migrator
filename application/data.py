@@ -9,41 +9,35 @@ from application.search_key import create_registration_key
 app_config = None
 
 
-def connect(cursor_factory=None):
-    connection = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(
-        app_config['DATABASE_NAME'], app_config['DATABASE_USER'], app_config['DATABASE_HOST'],
-        app_config['DATABASE_PASSWORD']))
-    return connection.cursor(cursor_factory=cursor_factory)
 
 
-def complete(cursor):
-    cursor.connection.commit()
-    cursor.close()
-    cursor.connection.close()
+# def connect(cursor_factory=None):
+    # connection = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(
+        # app_config['DATABASE_NAME'], app_config['DATABASE_USER'], app_config['DATABASE_HOST'],
+        # app_config['DATABASE_PASSWORD']))
+    # return connection.cursor(cursor_factory=cursor_factory)
 
 
-def rollback(cursor):
-    cursor.connection.rollback()
-    cursor.close()
-    cursor.connection.close()
+# def complete(cursor):
+    # cursor.connection.commit()
+    # cursor.close()
+    # cursor.connection.close()
 
 
-def insert_lc_county(cursor, register_details_id, county):
-    #logging.debug('Inserting: ' + county)
-    county_id = get_county_id(cursor, county)
-    cursor.execute("INSERT INTO detl_county_rel (county_id, details_id) " +
-                   "VALUES( %(county_id)s, %(details_id)s ) RETURNING id",
-                   {
-                       "county_id": county_id, "details_id": register_details_id
-                   })
-    rows = cursor.fetchall()
-    if len(rows) == 0:
-        raise RuntimeError("Invalid county ID: {}".format(county))
-
-    return rows[0]['id'], county_id
-
+# def rollback(cursor):
+    # cursor.connection.rollback()
+    # cursor.close()
+    # cursor.connection.close()
+county_lookup = {}
+    
 
 def get_county_id(cursor, county):
+    # Minor optimization: ~2% of the SQL insert time reduced
+    global county_lookup
+    if county in county_lookup:
+        return county_lookup[county]
+
+
     cursor.execute("SELECT id FROM county WHERE UPPER(name) = %(county)s",
                    {
                        "county": county.upper()
@@ -51,7 +45,10 @@ def get_county_id(cursor, county):
     rows = cursor.fetchall()
     if len(rows) == 0:
         raise RuntimeError("Invalid county: {}".format(county))
-    return rows[0]['id']
+        
+    id = rows[0]['id']
+    county_lookup[county] = id
+    return id
 
 
 def insert_registration(cursor, details_id, name_id, date, county_id, orig_reg_no=None):
@@ -59,6 +56,7 @@ def insert_registration(cursor, details_id, name_id, date, county_id, orig_reg_n
     if orig_reg_no is None:
         # Get the next registration number
         year = date[:4]  # date is a string
+        # Optimised: indexing register saves ~1% of SQL insert time
         cursor.execute('select MAX(registration_no) + 1 AS reg '
                        'from register  '
                        'where date >=%(start)s AND date < %(end)s',
@@ -77,30 +75,29 @@ def insert_registration(cursor, details_id, name_id, date, county_id, orig_reg_n
 
     # Check if registration_no and date already exist, if they do then increase sequence number
     # TODO: consider if the solution here is actually more robust...
-    cursor.execute('select MAX(reg_sequence_no) + 1 AS seq_no '
-                   'from register  '
-                   'where registration_no=%(reg_no)s AND date=%(date)s',
-                   {
-                       'reg_no': reg_no,
-                       'date': date
-                   })
-    rows = cursor.fetchall()
-    if rows[0]['seq_no'] is None:
-        version = 1
-    else:
-        version = int(rows[0]['seq_no'])
+    # cursor.execute('select MAX(reg_sequence_no) + 1 AS seq_no '
+                   # 'from register  '
+                   # 'where registration_no=%(reg_no)s AND date=%(date)s',
+                   # {
+                       # 'reg_no': reg_no,
+                       # 'date': date
+                   # })
+    # rows = cursor.fetchall()
+    # if rows[0]['seq_no'] is None:
+    version = 1
+    # else:
+        # version = int(rows[0]['seq_no'])
 
     # Cap it all off with the actual legal "one registration per name":
     cursor.execute("INSERT INTO register (registration_no, debtor_reg_name_id, details_id, date, county_id, reveal, " +
                    "reg_sequence_no) " +
-                   "VALUES( %(regno)s, %(debtor)s, %(details)s, %(date)s, %(county)s, %(rev)s, %(seq)s ) RETURNING id",
+                   "VALUES( %(regno)s, %(debtor)s, %(details)s, %(date)s, %(county)s, 't', %(seq)s ) RETURNING id",
                    {
                        "regno": reg_no,
                        "debtor": name_id,
                        "details": details_id,
                        'date': date,
                        'county': county_id,
-                       'rev': True,
                        'seq': version
                    })
     reg_id = cursor.fetchone()[0]
@@ -174,6 +171,21 @@ def insert_landcharge_regn(cursor, details_id, names, county_ids, date, orig_reg
             })
 
     return reg_nos, reg_id
+
+    
+def insert_lc_county(cursor, register_details_id, county):
+    #logging.debug('Inserting: ' + county)
+    county_id = get_county_id(cursor, county)
+    cursor.execute("INSERT INTO detl_county_rel (county_id, details_id) " +
+                   "VALUES( %(county_id)s, %(details_id)s ) RETURNING id",
+                   {
+                       "county_id": county_id, "details_id": register_details_id
+                   })
+    rows = cursor.fetchall()
+    if len(rows) == 0:
+        raise RuntimeError("Invalid county ID: {}".format(county))
+
+    return rows[0]['id'], county_id
 
 
 def insert_counties(cursor, details_id, counties):
@@ -259,16 +271,16 @@ def insert_register_details(cursor, request_id, data, date, amends):
                 amend_info_details_current = update['pab']
 
     cursor.execute("INSERT INTO register_details (request_id, class_of_charge, legal_body_ref, "
-                   "amends, district, short_description, additional_info, amendment_type, priority_notice_no, "
+                   "amends, district, short_description, amendment_type, priority_notice_no, "
                    "priority_notice_ind, prio_notice_expires, legal_body, legal_body_ref_no, "
                    "amend_info_type, amend_info_details, amend_info_details_orig ) "
-                   "VALUES (%(rid)s, %(coc)s, %(legal_ref)s, %(amends)s, %(dist)s, %(sdesc)s, %(addl)s, %(atype)s, "
+                   "VALUES (%(rid)s, %(coc)s, %(legal_ref)s, %(amends)s, %(dist)s, %(sdesc)s, %(atype)s, "
                    "%(pno)s, %(pind)s, %(pnx)s, %(legal_body)s, %(legal_ref_no)s, %(amd_type)s, "
                    "%(amd_detl_c)s, %(amd_detl_o)s ) "
                    "RETURNING id", {
                        "rid": request_id, "coc": data['class_of_charge'],
                        "legal_ref": legal_ref, "amends": amends, "dist": district,
-                       "sdesc": short_description, "addl": additional_info, "atype": amend_type,
+                       "sdesc": short_description, "atype": amend_type,
                        "pno": priority_notice, 'pind': is_priority_notice, "pnx": prio_notc_expires,
                        "legal_body": legal_body, "legal_ref_no": legal_ref_no,
                        "amd_type": amend_info_type, "amd_detl_c": amend_info_details_current,
@@ -286,10 +298,10 @@ def insert_party(cursor, details_id, party):
         occupation = party['occupation']
 
     if party['type'] == 'Debtor':
-        if 'date_of_birth' in party:
-            date_of_birth = party['date_of_birth']
-        else:
-            date_of_birth = None
+        # if 'date_of_birth' in party:
+            # date_of_birth = party['date_of_birth']
+        # else:
+        date_of_birth = None
         residence_withheld = party['residence_withheld']
 
     cursor.execute("INSERT INTO party (register_detl_id, party_type, occupation, date_of_birth, residence_withheld) " +
@@ -523,7 +535,7 @@ def insert_migrated_record(cursor, data):
                                                 data['registration']['registration_no'])
 
     if len(data['parties']) == 0:
-        # There was no row on the original index, so by definition is cannot be revealed
+        # There was no row on the original index, so by definition it cannot be revealed
         mark_as_no_reveal(cursor, data['registration']['registration_no'], data['registration']['date'])
 
     insert_migration_status(cursor,
@@ -537,9 +549,9 @@ def insert_migrated_record(cursor, data):
 
 
 def get_register_details_id(cursor, reg_no, date):
-    cursor.execute("SELECT details_id FROM register WHERE registration_no = %(regno)s AND date=%(date)s " +
-                   "ORDER BY reg_sequence_no DESC " +
-                   "FETCH FIRST 1 ROW ONLY",
+    cursor.execute("SELECT details_id FROM register WHERE registration_no = %(regno)s AND date=%(date)s " ,
+                   #"ORDER BY reg_sequence_no DESC " +
+                   #"FETCH FIRST 1 ROW ONLY",
                    {
                        "regno": reg_no,
                        'date': date
@@ -589,6 +601,33 @@ def insert_migrated_cancellation(cursor, data):
 
     return canc_details_id, canc_request_id
 
+    
+def connect_to_psql():
+    connection = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(
+        app_config['DATABASE_NAME'], app_config['DATABASE_USER'], app_config['DATABASE_HOST'],
+        app_config['DATABASE_PASSWORD']))
+    return connection
+    
+
+def disconnect_from_psql(connection):
+    connection.close()
+    
+    
+def create_cursor(connection):
+    return connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    
+def close_cursor(cursor):
+    cursor.close()
+    
+    
+def commit(cursor):
+    cursor.connection.commit()
+    
+   
+def rollback(cursor):
+    cursor.connection.rollback()
+    
 
 def migrate_record(config, data):
     # logging.debug("--- MIGRATE RECORD ---")
@@ -601,64 +640,77 @@ def migrate_record(config, data):
     previous_id = None
     first_record = data[0]
     failures = []
-    for register in data:
-        
-        for reg in register:        
-            cursor = connect(cursor_factory=psycopg2.extras.DictCursor)
-        
-            try:
-                if reg['type'] == 'CN':
-                    details_id, request_id = insert_migrated_cancellation(cursor, register)
-                else:
-                    details_id, request_id = insert_migrated_record(cursor, reg)
-                    if reg['type'] in ['AM', 'CN', 'CP', 'RN', 'RC']:
-                        if details_id is not None:
-                            cursor.execute("UPDATE register_details SET cancelled_by = %(canc)s WHERE " +
-                                           "id = %(id)s AND cancelled_by IS NULL",
-                                           {
-                                               "canc": request_id, "id": previous_id
-                                           })
-                        else:
-                            pass
+    conn = None
+    
+    try:
+        conn = connect_to_psql()
+    
+    
+        for register in data:
+            
+            for reg in register:        
+                #cursor = connect(cursor_factory=psycopg2.extras.DictCursor)
+                cursor = create_cursor(conn)
+            
+                try:
+                    if reg['type'] == 'CN':
+                        details_id, request_id = insert_migrated_cancellation(cursor, register)
+                    else:
+                        details_id, request_id = insert_migrated_record(cursor, reg)
+                        if reg['type'] in ['AM', 'CN', 'CP', 'RN', 'RC']:
+                            if details_id is not None:
+                                cursor.execute("UPDATE register_details SET cancelled_by = %(canc)s WHERE " +
+                                               "id = %(id)s AND cancelled_by IS NULL",
+                                               {
+                                                   "canc": request_id, "id": previous_id
+                                               })
+                            else:
+                                pass
 
-                        # TODO repeating code is bad.
-                        if reg['type'] == 'AM':
-                            cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
-                                           "id = %(id)s",
-                                           {
-                                               "amend": previous_id, "id": details_id, "type": "Amendment"
-                                           })
+                            # TODO repeating code is bad.
+                            if reg['type'] == 'AM':
+                                cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
+                                               "id = %(id)s",
+                                               {
+                                                   "amend": previous_id, "id": details_id, "type": "Amendment"
+                                               })
 
-                        if reg['type'] == 'RN':
-                            cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
-                                           "id = %(id)s",
-                                           {
-                                               "amend": previous_id, "id": details_id, "type": "Renewal"
-                                           })
+                            if reg['type'] == 'RN':
+                                cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
+                                               "id = %(id)s",
+                                               {
+                                                   "amend": previous_id, "id": details_id, "type": "Renewal"
+                                               })
 
-                        if reg['type'] == 'RC':
-                            cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
-                                           "id = %(id)s",
-                                           {
-                                               "amend": previous_id, "id": details_id, "type": "Rectification"
-                                           })
+                            if reg['type'] == 'RC':
+                                cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
+                                               "id = %(id)s",
+                                               {
+                                                   "amend": previous_id, "id": details_id, "type": "Rectification"
+                                               })
 
-                        if reg['type'] == 'CP':
-                            cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
-                                           "id = %(id)s",
-                                           {
-                                               "amend": previous_id, "id": details_id, "type": "Part Cancellation"
-                                           })
+                            if reg['type'] == 'CP':
+                                cursor.execute("UPDATE register_details SET amends = %(amend)s, amendment_type=%(type)s WHERE " +
+                                               "id = %(id)s",
+                                               {
+                                                   "amend": previous_id, "id": details_id, "type": "Part Cancellation"
+                                               })
 
-                previous_id = details_id
-                complete(cursor)
-            except Exception as e:
-                failures.append({
-                    'number': reg['registration']['number'],
-                    'date': reg['registration']['date'],
-                    'message': str(e)
-                })
-                rollback(cursor)
-            #raise
-
+                    previous_id = details_id
+                    #complete(cursor)
+                    commit(cursor)
+                except Exception as e:
+                    failures.append({
+                        'number': reg['registration']['number'],
+                        'date': reg['registration']['date'],
+                        'message': str(e)
+                    })
+                    rollback(cursor)
+                finally:
+                    close_cursor(cursor)
+                #raise
+    finally:
+        if conn is not None:
+            disconnect_from_psql(conn)
+    
     return failures

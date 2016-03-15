@@ -18,6 +18,7 @@ final_log = []
 error_queue = None
 wait_time_legacydb = 0
 wait_time_sqlinsert = 0
+sqlinsert_count = 0
 wait_time_manipulation = 0
 call_count_legacy_db = 0
 legacy_db_ttfb = 0
@@ -139,6 +140,7 @@ def log_item_summary(data):
 def migrate(config, start, end):
     global app_config
     global error_queue
+    global sqlinsert_count
     app_config = config
 
     # hostname = "amqp://{}:{}@{}:{}".format(app_config['MQ_USERNAME'], app_config['MQ_PASSWORD'],
@@ -309,6 +311,8 @@ def insert_record_to_db(config, data):
     start = time.perf_counter()
     failures = migrate_record(config, data)
     global wait_time_sqlinsert
+    global sqlinsert_count
+    sqlinsert_count += 1
     wait_time_sqlinsert += time.perf_counter() - start
     return failures
 
@@ -423,7 +427,7 @@ def build_dummy_row(entry):
     
     entry = {
         "registration": {
-            "registration_no": re.sub("/", "", entry['reg_no']),
+            "registration_no": re.sub("[^0-9]", "", entry['reg_no']),
             "date": entry['date']
         },
         "parties": [],
@@ -476,7 +480,7 @@ def build_registration(rows, name_type, name_data):
         "class_of_charge": coc,
         "registration": {
             "date": rows['registration_date'],
-            "registration_no": str(rows['registration_no'])
+            "registration_no": re.sub("[^0-9]", "", str(rows['registration_no']))
         },
         "parties": [{
             "type": eo_type,
