@@ -550,8 +550,8 @@ def insert_migrated_record(cursor, data):
 
 def get_register_details_id(cursor, reg_no, date):
     cursor.execute("SELECT details_id FROM register WHERE registration_no = %(regno)s AND date=%(date)s " ,
-                   #"ORDER BY reg_sequence_no DESC " +
-                   #"FETCH FIRST 1 ROW ONLY",
+                   "ORDER BY reg_sequence_no DESC "
+                   "FETCH FIRST 1 ROW ONLY",
                    {
                        "regno": reg_no,
                        'date': date
@@ -587,7 +587,9 @@ def insert_migrated_cancellation(cursor, data):
 
         canc_request_id = insert_request(cursor, cancellation['applicant'], 'Cancellation', cancellation['registration']['date'], None)
 
-        original_details_id = get_register_details_id(cursor, predecessor['registration']['registration_no'], predecessor['registration']['date'])
+        #original_details_id = get_register_details_id(cursor, predecessor['registration']['registration_no'], predecessor['registration']['date'])
+        original_details_id = predecessor['details_id']
+
         canc_date = cancellation['registration']['date']
         reg_nos, canc_details_id, reg_id = insert_record(cursor, cancellation, canc_request_id, canc_date, original_details_id, cancellation['registration']['registration_no'])
                                     # (cursor, data, request_id, date, amends=None, orig_reg_no=None)
@@ -657,6 +659,8 @@ def migrate_record(config, data):
                         details_id, request_id = insert_migrated_cancellation(cursor, register)
                     else:
                         details_id, request_id = insert_migrated_record(cursor, reg)
+                        reg['details_id'] = details_id
+
                         if reg['type'] in ['AM', 'CN', 'CP', 'RN', 'RC']:
                             if details_id is not None:
                                 cursor.execute("UPDATE register_details SET cancelled_by = %(canc)s WHERE " +
