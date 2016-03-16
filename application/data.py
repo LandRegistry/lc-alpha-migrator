@@ -666,6 +666,7 @@ def migrate_record(config, data):
                 try:
                     if reg['type'] == 'CN':
                         details_id, request_id = insert_migrated_cancellation(cursor, register)
+                        reg['details_id'] = details_id
                     else:
                         details_id, request_id = insert_migrated_record(cursor, reg)
                         reg['details_id'] = details_id
