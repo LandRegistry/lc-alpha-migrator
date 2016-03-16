@@ -573,41 +573,42 @@ def update_previous_details(cursor, request_id, original_detl_id):
                    })
 
 
-def insert_migrated_cancellation(cursor, data):
+def insert_migrated_cancellation(cursor, data, index):
     # We've already inserted the predecessor records... this is a 'full' cancellation,
     # So we need to insert the head record, and mark the chain as no-reveal
-    cancellation = data[-1]
+    cancellation = data[index]
     if len(data) == 1:
-        logging.error("Unexpected length of 1")
-        pass # Do what now...
+        raise RuntimeError("Unexpected length of 1")
 
-    else:
-        try:
-            logging.info("Insert cancellation")
-            predecessor = data[-2]
+    if index == 0:
+        raise RuntimeError("Unexpected cancellation at start of chain")
 
-            canc_request_id = insert_request(cursor, cancellation['applicant'], 'Cancellation', cancellation['registration']['date'], None)
+    try:
+        logging.info("Insert cancellation")
+        predecessor = data[index - 1]
 
-            #original_details_id = get_register_details_id(cursor, predecessor['registration']['registration_no'], predecessor['registration']['date'])
-            original_details_id = predecessor['details_id']
+        canc_request_id = insert_request(cursor, cancellation['applicant'], 'Cancellation', cancellation['registration']['date'], None)
 
-            canc_date = cancellation['registration']['date']
-            reg_nos, canc_details_id, reg_id = insert_record(cursor, cancellation, canc_request_id, canc_date, original_details_id, cancellation['registration']['registration_no'])
-                                        # (cursor, data, request_id, date, amends=None, orig_reg_no=None)
+        #original_details_id = get_register_details_id(cursor, predecessor['registration']['registration_no'], predecessor['registration']['date'])
+        original_details_id = predecessor['details_id']
 
-            update_previous_details(cursor, canc_details_id, original_details_id)
+        canc_date = cancellation['registration']['date']
+        reg_nos, canc_details_id, reg_id = insert_record(cursor, cancellation, canc_request_id, canc_date, original_details_id, cancellation['registration']['registration_no'])
+                                    # (cursor, data, request_id, date, amends=None, orig_reg_no=None)
 
-            for reg in data:
-                #logging.debug(reg)
-                mark_as_no_reveal(cursor, reg['registration']['registration_no'], reg['registration']['date'])
-                logging.info("%s %s hidden", reg['registration']['registration_no'], reg['registration']['date'])
-        except Exception as e:
-            logging.error(e)
-            logging.error('Pre:')
-            logging.error(predecessor)
-            logging.error('cancel:')
-            logging.error(cancellation)
-            raise
+        update_previous_details(cursor, canc_details_id, original_details_id)
+
+        for reg in data:
+            #logging.debug(reg)
+            mark_as_no_reveal(cursor, reg['registration']['registration_no'], reg['registration']['date'])
+            logging.info("%s %s hidden", reg['registration']['registration_no'], reg['registration']['date'])
+    except Exception as e:
+        logging.error(e)
+        logging.error('Pre:')
+        logging.error(predecessor)
+        logging.error('cancel:')
+        logging.error(cancellation)
+        raise
 
 
     return canc_details_id, canc_request_id
@@ -659,13 +660,13 @@ def migrate_record(config, data):
     
         for register in data:
             
-            for reg in register:        
+            for index, reg in enumerate(register):
                 #cursor = connect(cursor_factory=psycopg2.extras.DictCursor)
                 cursor = create_cursor(conn)
             
                 try:
                     if reg['type'] == 'CN':
-                        details_id, request_id = insert_migrated_cancellation(cursor, register)
+                        details_id, request_id = insert_migrated_cancellation(cursor, register, index)
                         reg['details_id'] = details_id
                     else:
                         details_id, request_id = insert_migrated_record(cursor, reg)
@@ -679,7 +680,9 @@ def migrate_record(config, data):
                                                    "canc": request_id, "id": previous_id
                                                })
                             else:
-                                pass
+                                raise RuntimeError("No details ID retrieved: {} {}".format(
+                                    reg['registration']['registration_no'],
+                                    reg['registration']['date']))
 
                             # TODO repeating code is bad.
                             if reg['type'] == 'AM':
