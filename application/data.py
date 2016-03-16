@@ -582,24 +582,33 @@ def insert_migrated_cancellation(cursor, data):
         pass # Do what now...
 
     else:
-        logging.info("Insert cancellation")
-        predecessor = data[-2]
+        try:
+            logging.info("Insert cancellation")
+            predecessor = data[-2]
 
-        canc_request_id = insert_request(cursor, cancellation['applicant'], 'Cancellation', cancellation['registration']['date'], None)
+            canc_request_id = insert_request(cursor, cancellation['applicant'], 'Cancellation', cancellation['registration']['date'], None)
 
-        #original_details_id = get_register_details_id(cursor, predecessor['registration']['registration_no'], predecessor['registration']['date'])
-        original_details_id = predecessor['details_id']
+            #original_details_id = get_register_details_id(cursor, predecessor['registration']['registration_no'], predecessor['registration']['date'])
+            original_details_id = predecessor['details_id']
 
-        canc_date = cancellation['registration']['date']
-        reg_nos, canc_details_id, reg_id = insert_record(cursor, cancellation, canc_request_id, canc_date, original_details_id, cancellation['registration']['registration_no'])
-                                    # (cursor, data, request_id, date, amends=None, orig_reg_no=None)
+            canc_date = cancellation['registration']['date']
+            reg_nos, canc_details_id, reg_id = insert_record(cursor, cancellation, canc_request_id, canc_date, original_details_id, cancellation['registration']['registration_no'])
+                                        # (cursor, data, request_id, date, amends=None, orig_reg_no=None)
 
-        update_previous_details(cursor, canc_details_id, original_details_id)
+            update_previous_details(cursor, canc_details_id, original_details_id)
 
-        for reg in data:
-            #logging.debug(reg)
-            mark_as_no_reveal(cursor, reg['registration']['registration_no'], reg['registration']['date'])
-            logging.info("%s %s hidden", reg['registration']['registration_no'], reg['registration']['date'])
+            for reg in data:
+                #logging.debug(reg)
+                mark_as_no_reveal(cursor, reg['registration']['registration_no'], reg['registration']['date'])
+                logging.info("%s %s hidden", reg['registration']['registration_no'], reg['registration']['date'])
+        except Exception as e:
+            logging.error(e)
+            logging.error('Pre:')
+            logging.error(predecessor)
+            logging.error('cancel:')
+            logging.error(cancellation)
+            raise
+
 
     return canc_details_id, canc_request_id
 
@@ -705,7 +714,7 @@ def migrate_record(config, data):
                     commit(cursor)
                 except Exception as e:
                     failures.append({
-                        'number': reg['registration']['number'],
+                        'number': reg['registration']['registration_no'],
                         'date': reg['registration']['date'],
                         'message': str(e)
                     })
