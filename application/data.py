@@ -272,17 +272,16 @@ def insert_register_details(cursor, request_id, data, date, amends):
 
     cursor.execute("INSERT INTO register_details (request_id, class_of_charge, legal_body_ref, "
                    "amends, district, short_description, amendment_type, priority_notice_no, "
-                   "priority_notice_ind, prio_notice_expires, legal_body, legal_body_ref_no, "
+                   "priority_notice_ind, prio_notice_expires, "
                    "amend_info_type, amend_info_details, amend_info_details_orig ) "
                    "VALUES (%(rid)s, %(coc)s, %(legal_ref)s, %(amends)s, %(dist)s, %(sdesc)s, %(atype)s, "
-                   "%(pno)s, %(pind)s, %(pnx)s, %(legal_body)s, %(legal_ref_no)s, %(amd_type)s, "
+                   "%(pno)s, %(pind)s, %(pnx)s, %(amd_type)s, "
                    "%(amd_detl_c)s, %(amd_detl_o)s ) "
                    "RETURNING id", {
                        "rid": request_id, "coc": data['class_of_charge'],
                        "legal_ref": legal_ref, "amends": amends, "dist": district,
                        "sdesc": short_description, "atype": amend_type,
                        "pno": priority_notice, 'pind': is_priority_notice, "pnx": prio_notc_expires,
-                       "legal_body": legal_body, "legal_ref_no": legal_ref_no,
                        "amd_type": amend_info_type, "amd_detl_c": amend_info_details_current,
                        "amd_detl_o": amend_info_details_orig
                    })
