@@ -20,7 +20,6 @@ def convert_class(class_of_charge):
         return class_of_charge
 
         
-        
 def class_without_brackets(class_of_charge):
     charge = {
         "C(I)": "C1",

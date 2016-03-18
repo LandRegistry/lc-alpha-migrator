@@ -54,8 +54,9 @@ for x in range(0, slices):
     })
 
 for r in ranges:
-    print("{} -> {}".format(r['start'], r['end']))
-
-for r in ranges:
-    p = Process(target=migrate, args=(config, r['start'].strftime('%Y-%m-%d'), r['end'].strftime('%Y-%m-%d')))
+    name = "Migrate {} -> {}".format(r['start'].strftime('%Y-%m-%d'), r['end'].strftime('%Y-%m-%d'))
+    print(name)
+    p = Process(target=migrate,
+                args=(config, r['start'].strftime('%Y-%m-%d'), r['end'].strftime('%Y-%m-%d')),
+                name=name)
     p.start()
