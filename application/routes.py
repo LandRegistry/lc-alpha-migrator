@@ -247,7 +247,7 @@ def migrate(config, start, end):
                         this_register.append(record)
 
                 flag_oddities(this_register)
-                save_to_file(this_register)
+                #save_to_file(this_register)
                 wait_time_manipulation += time.perf_counter() - start
                 registrations.append(this_register)
 

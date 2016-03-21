@@ -513,7 +513,6 @@ def insert_migration_status(cursor, register_id, registration_number, registrati
 
 
 def insert_migrated_record(cursor, data):
-    logging.info("Insert record")
     data["class_of_charge"] = re.sub(r"\(|\)", "", data["class_of_charge"])
 
     # TODO: using registration date as request date. Valid? Always?
