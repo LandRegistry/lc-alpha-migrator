@@ -519,7 +519,6 @@ def build_registration(rows, name_type, name_data):
             }
             registration['parties'][0]['addresses'].append(addr_obj)
         
-        
         if amend['court'] is not None:
             registration['parties'].append({
                 'type': 'Court',
@@ -530,6 +529,17 @@ def build_registration(rows, name_type, name_data):
             })       
         
     else:
+        if rows['address'] is not None and rows['address'] != '':
+            # Some old registers have addresses on non-PAB/WOB regns
+            registration['parties'][0]['addresses'] = []
+            address_strings = rows['address'].split('   ')
+            for address in address_strings:
+                addr_obj = {
+                    'type': 'Residence',
+                    'address_string': address
+                }
+                registration['parties'][0]['addresses'].append(addr_obj)
+
         registration['particulars'] = {
             'counties': [reformat_county(county_text)],
             'district': parish_district,
