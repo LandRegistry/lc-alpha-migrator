@@ -12,7 +12,7 @@ import psycopg2
 
 
 # Some look up tables etc.
-NOISE = ['AND', 'OF', 'FOR', 'TO', '&']
+NOISE = ['AND', 'THE', 'OF', 'FOR', 'TO', '&']
 
 COMMON_WORDS = {
     'ASS': ['ASS', 'ASSOC', 'ASSOCS', 'ASSOCIATE', 'ASSOCIATED', 'ASSOCIATES', 'ASSOCIATION', 'ASSOCIATIONS'],
