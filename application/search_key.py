@@ -165,7 +165,20 @@ def fetch_name_key(cursor, name):
     cursor.execute('SELECT key FROM county_search_keys WHERE name=%(name)s', {'name': name.upper()})
     rows = cursor.fetchall()
     if len(rows) == 0:
-        raise RuntimeError('No variants found for name {}'.format(name))
+        # Right, the full test run turned up only four authority names that the new data tables deem to be
+        # invalid (all date from the 1970s). There are elegant and correct ways to fix this, but there are
+        # only FOUR such names, and this program will be executed once.
+        # Therefore, hardcoding these cases is just easier.
+        if name == 'WEST RIDING OF YORKSHIRE':
+            return 'WESTRIDIN'
+        elif name == 'LINCOLN PARTS OF LINDSEY':
+            return 'LINCOLN'
+        elif name == 'CAMBRIDGSHIRE AND ISLE OF ELY':
+            return 'CAMBRIDGE'
+        elif name == 'NORTH RIDING OF YORKSHIRE':
+            return 'NORTHRIDI'
+        else:
+            raise RuntimeError('No variants found for name {}'.format(name))
     if len(rows) > 1:
         raise RuntimeError('Too many variants found for name {}'.format(name))
     key = rows[0]['key']
