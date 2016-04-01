@@ -11,25 +11,6 @@ from application.search_key import create_registration_key
 app_config = None
 
 
-
-
-# def connect(cursor_factory=None):
-    # connection = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(
-        # app_config['DATABASE_NAME'], app_config['DATABASE_USER'], app_config['DATABASE_HOST'],
-        # app_config['DATABASE_PASSWORD']))
-    # return connection.cursor(cursor_factory=cursor_factory)
-
-
-# def complete(cursor):
-    # cursor.connection.commit()
-    # cursor.close()
-    # cursor.connection.close()
-
-
-# def rollback(cursor):
-    # cursor.connection.rollback()
-    # cursor.close()
-    # cursor.connection.close()
 county_lookup = {}
     
 
@@ -661,9 +642,7 @@ def insert_migrated_cancellation(cursor, data, index):
 
     
 def connect_to_psql():
-    connection = psycopg2.connect("dbname='{}' user='{}' host='{}' password='{}'".format(
-        app_config['DATABASE_NAME'], app_config['DATABASE_USER'], app_config['DATABASE_HOST'],
-        app_config['DATABASE_PASSWORD']))
+    connection = psycopg2.connect(app_config['PSQL_CONNECTION'])
     return connection
     
 

@@ -143,8 +143,7 @@ def migrate(config, start, end):
     global sqlinsert_count
     app_config = config
 
-    # hostname = "amqp://{}:{}@{}:{}".format(app_config['MQ_USERNAME'], app_config['MQ_PASSWORD'],
-    #                                        app_config['MQ_HOSTNAME'], app_config['MQ_PORT'])
+    # hostname = app_config['AMQP_URI']
     # connection = kombu.Connection(hostname=hostname)
     # error_queue = connection.SimpleQueue('errors')
 
