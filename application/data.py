@@ -4,6 +4,7 @@ import logging
 import re
 import json
 import traceback
+import datetime
 from application.search_key import create_registration_key
 
 
@@ -52,7 +53,14 @@ def get_county_id(cursor, county):
     return id
 
 
-def insert_registration(cursor, reveal, details_id, name_id, date, county_id, orig_reg_no=None):
+def calc_five_year_expiry(date):
+    cdate = datetime.datetime.strptime(date, "%Y-%m-%d")
+    cdate = datetime.datetime(cdate.year + 5, cdate.month, cdate.day)
+    cdate += datetime.timedelta(days=10)
+    return cdate
+
+
+def insert_registration(cursor, expires_date, details_id, name_id, date, county_id, orig_reg_no=None):
     #logging.debug('Insert registration')
     if orig_reg_no is None:
         # Get the next registration number
@@ -90,16 +98,16 @@ def insert_registration(cursor, reveal, details_id, name_id, date, county_id, or
         # version = int(rows[0]['seq_no'])
 
     # Cap it all off with the actual legal "one registration per name":
-    cursor.execute("INSERT INTO register (registration_no, debtor_reg_name_id, details_id, date, county_id, reveal, " +
+    cursor.execute("INSERT INTO register (registration_no, debtor_reg_name_id, details_id, date, county_id, expired_on, " +
                    "reg_sequence_no) " +
-                   "VALUES( %(regno)s, %(debtor)s, %(details)s, %(date)s, %(county)s, %(rev)s, %(seq)s ) RETURNING id",
+                   "VALUES( %(regno)s, %(debtor)s, %(details)s, %(date)s, %(county)s, %(exp)s, %(seq)s ) RETURNING id",
                    {
                        "regno": reg_no,
                        "debtor": name_id,
                        "details": details_id,
                        'date': date,
                        'county': county_id,
-                       'rev': reveal,
+                       'exp': expires_date,
                        'seq': version
                    })
     reg_id = cursor.fetchone()[0]
@@ -108,9 +116,15 @@ def insert_registration(cursor, reveal, details_id, name_id, date, county_id, or
 
 def insert_bankruptcy_regn(cursor, reveal, details_id, names, date, orig_reg_no):
     #logging.debug('Inserting banks reg')
+
+    if reveal is False:
+        ex_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    else:
+        ex_date = calc_five_year_expiry(date)
+
     reg_nos = []
     if len(names) == 0:  # Migration case only...
-        reg_no, reg_id = insert_registration(cursor, reveal, details_id, None, date, None, orig_reg_no)
+        reg_no, reg_id = insert_registration(cursor, ex_date, details_id, None, date, None, orig_reg_no)
         reg_nos.append({
             'number': reg_no,
             'date': date,
@@ -120,7 +134,7 @@ def insert_bankruptcy_regn(cursor, reveal, details_id, names, date, orig_reg_no)
     else:
         #logging.debug(names)
         for name in names:
-            reg_no, reg_id = insert_registration(cursor, reveal, details_id, name['id'], date, None, orig_reg_no)
+            reg_no, reg_id = insert_registration(cursor, ex_date, details_id, name['id'], date, None, orig_reg_no)
             if 'forenames' in name:
                 reg_nos.append({
                     'number': reg_no,
@@ -137,10 +151,17 @@ def insert_bankruptcy_regn(cursor, reveal, details_id, names, date, orig_reg_no)
     return reg_nos, reg_id
 
 
-def insert_landcharge_regn(cursor, reveal, details_id, names, county_ids, date, orig_reg_no):
+def insert_landcharge_regn(cursor, reveal, class_of_charge, details_id, names, county_ids, date, orig_reg_no):
     #logging.debug('Inserting LC reg')
     if len(names) > 1:
         raise RuntimeError("Invalid number of names: {}".format(len(names)))
+
+    ex_date = None
+    if reveal is False:
+        ex_date = datetime.datetime.now().strftime('%Y-%m-%d')
+
+    if reveal is True and class_of_charge in ['PA', 'WO', 'DA']:
+        ex_date = calc_five_year_expiry(date)
 
     reg_nos = []
     if len(county_ids) == 0:  # can occur on migration or a registration against NO COUNTY
@@ -149,7 +170,7 @@ def insert_landcharge_regn(cursor, reveal, details_id, names, county_ids, date, 
         else:
             name = None
 
-        reg_no, reg_id = insert_registration(cursor, reveal, details_id, name, date, None, orig_reg_no)
+        reg_no, reg_id = insert_registration(cursor, ex_date, details_id, name, date, None, orig_reg_no)
         reg_nos.append({
             'number': reg_no,
             'date': date,
@@ -164,7 +185,7 @@ def insert_landcharge_regn(cursor, reveal, details_id, names, county_ids, date, 
             else:
                 name = None
 
-            reg_no, reg_id = insert_registration(cursor, reveal, details_id, name, date, county['id'], orig_reg_no)
+            reg_no, reg_id = insert_registration(cursor, ex_date, details_id, name, date, county['id'], orig_reg_no)
 
             reg_nos.append({
                 'number': reg_no,
@@ -491,7 +512,7 @@ def insert_record(cursor, data, request_id, date, reveal, amends=None, orig_reg_
         reg_nos, reg_id = insert_bankruptcy_regn(cursor, reveal, register_details_id, names, date, orig_reg_no)
     else:
         county_ids = insert_counties(cursor, register_details_id, data['particulars']['counties'])
-        reg_nos, reg_id = insert_landcharge_regn(cursor, reveal, register_details_id, names, county_ids, date, orig_reg_no)
+        reg_nos, reg_id = insert_landcharge_regn(cursor, reveal, data['class_of_charge'], register_details_id, names, county_ids, date, orig_reg_no)
 
     # TODO: audit-log not done. Not sure it belongs here?
     return reg_nos, register_details_id, reg_id
@@ -515,12 +536,6 @@ def insert_request(cursor, applicant, application_type, date, original_data=None
                        "cust_addr": applicant['address']
                    })
     return cursor.fetchone()[0]
-
-
-# def mark_as_no_reveal(cursor, reg_no, date):
-#     cursor.execute("UPD-ATE register SET reveal=%(rev)s WHERE registration_no=%(regno)s AND date=%(date)s", {
-#         "rev": False, "regno": reg_no, "date": date
-#     })
 
 
 def insert_migration_status(cursor, register_id, registration_number, registration_date, class_of_charge,
