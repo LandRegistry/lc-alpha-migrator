@@ -213,6 +213,15 @@ def count_words(name_array):
     return count
 
 
+def contains_common_word(name_array):
+    for common in COMMON_WORDS:
+        options = COMMON_WORDS[common]
+        for word in options:
+            if word in name_array:
+                return True
+    return False
+
+
 def contains_b_indicators(name):
     test = COMPLEX_NAME_INDICATORS + B_INDICATORS
     for indicator in test:
@@ -236,7 +245,7 @@ def is_class_b(name):
     name_array = name.upper().split(' ')
     word_count = count_words(name_array)
     contains_notable_word = contains_noise_nonkey_or_s_words(name_array) or \
-        contains_b_indicators(name)
+        contains_b_indicators(name) or contains_common_word(name_array)
 
     if word_count > 4 or contains_notable_word:
         return True
