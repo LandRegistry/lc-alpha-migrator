@@ -42,7 +42,7 @@ def parse_amend_info(info):
     data = {
         'court': None,
         'reference': '',
-        'additional_information': ''
+        'additional_information': info
     }
     
     match = re.match(r"^(.* COUNTY COURT) NO (\d+ OF \d+)", info)
@@ -61,7 +61,7 @@ def parse_amend_info(info):
     # RENEWAL OF (\d+) REGD (\d\d\/\d\d\/\d{4})
     # PART CAN (\d+) REGD (\d\d\/\d\d\/\d{4}) SO FAR ONLY AS IT RELATES TO (.*)
 
-    data['additional_information'] = info  # Default fall-back position
+    #data['additional_information'] = info  # Default fall-back position
     return data
     
     

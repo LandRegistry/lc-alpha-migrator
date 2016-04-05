@@ -212,7 +212,7 @@ def migrate(config, start, end):
                 global wait_time_manipulation
                 
                 if history is None or len(history) == 0:
-                    logging.error("  No document history information found") # TODO: need a bucket of these
+                    logging.error("  No document history information found")
                     continue
 
                 total_inc_history += len(history)
@@ -235,10 +235,11 @@ def migrate(config, start, end):
                         #get_land_charge(numeric_reg_no, registers['class'], registers['date'])
                    
                     if land_charges is not None and len(land_charges) > 0:
-                        record = extract_data(land_charges, registers['type'])
-                        #registrations.append(record)
-                        this_register.append(record)
-                        #registration[x]['reg_no'] = numeric_reg_no
+                        records = extract_data(land_charges, registers['type'])
+
+                        #this_register.append(record)
+                        this_register += records
+
                         
                     else:
                         record = build_dummy_row(registers)
@@ -386,7 +387,83 @@ def extract_data(rows, app_type):
         registration = extract_simple(data)
     
     registration['type'] = app_type
-    return registration
+
+    addl_rows = []
+    if len(rows) > 1:
+        addl_rows = handle_additional_rows(registration, rows, app_type)
+
+    return [registration] + addl_rows
+
+
+def whats_different(row1, row2):
+    changes = []
+    for key in row1:
+        if row1[key] != row2[key]:
+            changes.append(key)
+
+    return changes
+
+
+def handle_additional_rows(registration, rows, app_type):
+    # It's possible for the data to turn up some interesting variants where we have multiple index entries for
+    # a registration. This is uncommon (about 1.3% of the entries), but 1.3% of several million is still a good
+    # number of rows.
+    # Identified cases:
+    #   Additional county           add extra county to existing row
+    #   Additional name             add extra names
+    #   Additional class of charge  add new registration
+    add_regs = []
+
+    for row in rows[1:]:
+        changes = whats_different(row, rows[0])
+        if "class_type" in changes:
+            add_regs.append(extract_data([row], app_type))
+        elif "amendment_info" in changes or \
+             "priority_notice" in changes or \
+             "parish_district" in changes or \
+             "address" in changes or \
+             "priority_notice_ref" in changes or \
+             "counties" in changes:
+            logging.error(changes)
+            raise MigrationException("Unable to process ambiguous registration")
+        elif "reverse_name" in changes or "remainder_name" in changes or "punctuation_code" in changes:
+            #logging.info('Additional names required')
+            alt_regn = extract_data([row], app_type)[0]
+            if len(alt_regn['parties']) > 0:
+                #logging.debug('Copying names...')
+                for name in alt_regn['parties'][0]['names']:
+                    registration['parties'][0]['names'].append(name)
+
+        elif "property_county" in changes and 'particulars' in registration:
+            #logging.info('Additional county required')
+            if row['property_county'] not in registration['particulars']['counties']:
+                registration['particulars']['counties'].append(row['property_county'])
+        elif "time" in changes:
+            pass  # this is fine, and expected
+        else:
+            logging.error(changes)
+            raise MigrationException("Unexpected changed field")
+
+    # property_county
+    # registration_date
+    # amendment_info
+    # reverse_name
+    # reverse_name_hex
+    # punctuation_code
+    # priority_notice
+    # property
+    # name
+    # occupation
+    # remainder_name
+    # registration_no
+    # parish_district
+    # address
+    # priority_notice_ref
+    # counties
+    # time
+    # class_type
+
+    return add_regs
 
 
 def extract_simple(rows):
@@ -521,10 +598,10 @@ def build_registration(rows, name_type, name_data):
         if amend['court'] is not None:
             registration['parties'].append({
                 'type': 'Court',
-                'names': [ {
+                'names': [{
                     'type': 'Other',
                     'other': amend['court']
-                } ]
+                }]
             })       
         
     else:
