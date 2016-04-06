@@ -414,54 +414,59 @@ def handle_additional_rows(registration, rows, app_type):
     #   Additional class of charge  add new registration
     add_regs = []
 
+    #"migration_data": {
+    #registration['migration_data']['additional_data'] = []
+    additional_data = {}
+
     for row in rows[1:]:
         changes = whats_different(row, rows[0])
         if "class_type" in changes:
             add_regs.append(extract_data([row], app_type))
-        elif "amendment_info" in changes or \
-             "priority_notice" in changes or \
-             "parish_district" in changes or \
-             "address" in changes or \
-             "priority_notice_ref" in changes or \
-             "counties" in changes:
-            logging.error(changes)
-            raise MigrationException("Unable to process ambiguous registration")
-        elif "reverse_name" in changes or "remainder_name" in changes or "punctuation_code" in changes:
-            #logging.info('Additional names required')
-            alt_regn = extract_data([row], app_type)[0]
-            if len(alt_regn['parties']) > 0:
-                #logging.debug('Copying names...')
-                for name in alt_regn['parties'][0]['names']:
-                    registration['parties'][0]['names'].append(name)
 
-        elif "property_county" in changes and 'particulars' in registration:
-            #logging.info('Additional county required')
-            if row['property_county'] not in registration['particulars']['counties']:
-                registration['particulars']['counties'].append(row['property_county'])
-        elif "time" in changes:
-            pass  # this is fine, and expected
         else:
-            logging.error(changes)
-            raise MigrationException("Unexpected changed field")
+            # Lovely unrolled loop... well, it's a one-off
+            if "amendment_info" in changes:
+                if 'amendment_info' not in additional_data:
+                    additional_data['amendment_info'] = []
+                additional_data['amendment_info'].append(row['amendment_info'])
 
-    # property_county
-    # registration_date
-    # amendment_info
-    # reverse_name
-    # reverse_name_hex
-    # punctuation_code
-    # priority_notice
-    # property
-    # name
-    # occupation
-    # remainder_name
-    # registration_no
-    # parish_district
-    # address
-    # priority_notice_ref
-    # counties
-    # time
-    # class_type
+            if "priority_notice" in changes:
+                if 'priority_notice' not in additional_data:
+                    additional_data['priority_notice'] = []
+                additional_data['priority_notice'].append(row['priority_notice'])
+
+            if "parish_district" in changes:
+                if 'parish_district' not in additional_data:
+                    additional_data['parish_district'] = []
+                additional_data['parish_district'].append(row['parish_district'])
+
+            if "address" in changes:
+                if 'address' not in additional_data:
+                    additional_data['address'] = []
+                additional_data['address'].append(row['address'])
+
+            if "priority_notice_ref" in changes:
+                if 'priority_notice_ref' not in additional_data:
+                    additional_data['priority_notice_ref'] = []
+                additional_data['priority_notice_ref'].append(row['priority_notice_ref'])
+
+            if "counties" in changes:
+                if 'counties' not in additional_data:
+                    additional_data['counties'] = []
+                additional_data['counties'].append(row['counties'])
+
+            if "reverse_name" in changes or "remainder_name" in changes or "punctuation_code" in changes:
+                alt_regn = extract_data([row], app_type)[0]
+                if len(alt_regn['parties']) > 0:
+                    # logging.debug('Copying names...')
+                    for name in alt_regn['parties'][0]['names']:
+                        registration['parties'][0]['names'].append(name)
+
+            if "property_county" in changes and 'particulars' in registration:
+                if row['property_county'] != 'BANKS' and row['property_county'] not in registration['particulars']['counties']:
+                    registration['particulars']['counties'].append(row['property_county'])
+
+    registration['migration_data']['additional_rows'] = additional_data
 
     return add_regs
 
@@ -547,7 +552,7 @@ def build_registration(rows, name_type, name_data):
         banks_county = rows['counties']
         logging.info('    BANKS county of "%s"', county_text)
 
-    if county_text in ['NO COUNTY', 'NO COUNTIES']:
+    if county_text in ['NO COUNTY', 'NO COUNTIES', 'BANKS']:
         county_text = ''
     
     pty_desc = rows['property']

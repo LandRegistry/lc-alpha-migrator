@@ -26,7 +26,7 @@ def get_county_id(cursor, county):
                    })
     rows = cursor.fetchall()
     if len(rows) == 0:
-        raise RuntimeError("Invalid county: {}".format(county))
+        raise RuntimeError("Invalid county: '{}'".format(county))
         
     id = rows[0]['id']
     county_lookup[county] = id
@@ -727,6 +727,7 @@ def migrate_record(config, data):
                     commit(cursor)
                 except Exception as e:
                     logging.error(str(e))
+                    # logging.error(data)
                     call_stack = traceback.format_exc()
 
                     lines = call_stack.split("\n")

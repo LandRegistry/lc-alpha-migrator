@@ -1,4 +1,3 @@
-act migrator
 python3 run.py 1900-09-30 1900-09-30;
 python3 run.py 1929-02-02 1929-02-02;
 python3 run.py 1931-09-22 1931-09-22;
