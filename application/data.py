@@ -727,6 +727,7 @@ def migrate_record(config, data):
                     commit(cursor)
                 except Exception as e:
                     logging.error(str(e))
+                    logging.error("Failed on {} {}".format(reg['registration']['registration_no'], reg['registration']['date']))
                     # logging.error(data)
                     call_stack = traceback.format_exc()
 
