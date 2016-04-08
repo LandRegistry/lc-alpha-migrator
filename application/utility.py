@@ -67,9 +67,12 @@ def parse_amend_info(info):
     
 def reformat_county(county):
     known_variations = {
-        'DURHAM': 'COUNTY DURHAM'
+        'DURHAM': 'COUNTY DURHAM',
+        'STOCKTON-ON-TEES': 'STOCKTON ON TEES',
+        'BRIGHTON & HOVE': 'BRIGHTON AND HOVE',
+        'CITY OF KINGSTON UPON HULL': 'KINGSTON UPON HULL (CITY OF)'
     }
-    
+
     if county in known_variations:
         county = known_variations[county]
 

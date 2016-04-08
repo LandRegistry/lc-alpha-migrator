@@ -35,7 +35,11 @@ def get_county_id(cursor, county):
 
 def calc_five_year_expiry(date):
     cdate = datetime.datetime.strptime(date, "%Y-%m-%d")
-    cdate = datetime.datetime(cdate.year + 5, cdate.month, cdate.day)
+    day = cdate.day
+    if cdate.month == 2 and day == 29:
+        day = 28
+
+    cdate = datetime.datetime(cdate.year + 5, cdate.month, day)
     cdate += datetime.timedelta(days=10)
     return cdate
 
@@ -204,8 +208,9 @@ def insert_counties(cursor, details_id, counties):
 
     ids = []
     for county in counties:
-        county_detl_id, county_id = insert_lc_county(cursor, details_id, county)
-        ids.append({'id': county_id, 'name': county})
+        if county != '':
+            county_detl_id, county_id = insert_lc_county(cursor, details_id, county)
+            ids.append({'id': county_id, 'name': county})
     return ids
 
 
@@ -727,6 +732,7 @@ def migrate_record(config, data):
                     commit(cursor)
                 except Exception as e:
                     logging.error(str(e))
+                    logging.error("Failed on {} {}".format(reg['registration']['registration_no'], reg['registration']['date']))
                     # logging.error(data)
                     call_stack = traceback.format_exc()
 
