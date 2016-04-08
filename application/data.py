@@ -208,8 +208,9 @@ def insert_counties(cursor, details_id, counties):
 
     ids = []
     for county in counties:
-        county_detl_id, county_id = insert_lc_county(cursor, details_id, county)
-        ids.append({'id': county_id, 'name': county})
+        if county != '':
+            county_detl_id, county_id = insert_lc_county(cursor, details_id, county)
+            ids.append({'id': county_id, 'name': county})
     return ids
 
 
