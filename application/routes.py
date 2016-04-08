@@ -445,6 +445,21 @@ def handle_additional_rows(registration, rows, app_type):
                     additional_data['address'] = []
                 additional_data['address'].append(row['address'])
 
+            if "property" in changes:
+                if 'property' not in additional_data:
+                    additional_data['property'] = []
+                additional_data['property'].append(row['property'])
+
+            if "name" in changes:
+                if 'name' not in additional_data:
+                    additional_data['name'] = []
+                additional_data['name'].append(row['name'])
+
+            if "occupation" in changes:
+                if 'occupation' not in additional_data:
+                    additional_data['occupation'] = []
+                additional_data['occupation'].append(row['occupation'])
+
             if "priority_notice_ref" in changes:
                 if 'priority_notice_ref' not in additional_data:
                     additional_data['priority_notice_ref'] = []
