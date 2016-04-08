@@ -464,7 +464,7 @@ def handle_additional_rows(registration, rows, app_type):
 
             if "property_county" in changes and 'particulars' in registration:
                 if row['property_county'] not in ['BANKS', 'NO COUNTY', 'NO COUNTIES'] and row['property_county'] not in registration['particulars']['counties']:
-                    registration['particulars']['counties'].append(row['property_county'])
+                    registration['particulars']['counties'].append(reformat_county(row['property_county']))
 
     registration['migration_data']['additional_rows'] = additional_data
 

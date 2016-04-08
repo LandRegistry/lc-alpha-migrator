@@ -35,7 +35,11 @@ def get_county_id(cursor, county):
 
 def calc_five_year_expiry(date):
     cdate = datetime.datetime.strptime(date, "%Y-%m-%d")
-    cdate = datetime.datetime(cdate.year + 5, cdate.month, cdate.day)
+    day = cdate.day
+    if cdate.month == 2 and day == 29:
+        day = 28
+
+    cdate = datetime.datetime(cdate.year + 5, cdate.month, day)
     cdate += datetime.timedelta(days=10)
     return cdate
 
