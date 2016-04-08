@@ -170,7 +170,6 @@ def insert_landcharge_regn(cursor, reveal, class_of_charge, details_id, names, c
 
     else:
         for county in county_ids:
-            #logging.debug(county['id'])
             if len(names) > 0:
                 name = names[0]['id']
             else:
@@ -183,6 +182,7 @@ def insert_landcharge_regn(cursor, reveal, class_of_charge, details_id, names, c
                 'date': date,
                 'county': county['name'],
             })
+            break
 
     return reg_nos, reg_id
 
