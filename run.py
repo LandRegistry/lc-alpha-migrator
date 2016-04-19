@@ -5,10 +5,12 @@ from application.routes import migrate
 from log.logger import setup_logging
 import sys
 
+exit(1)
+
 if len(sys.argv) < 3:
     print('Insuffcient parameters specified')
     exit()
-    
+
 s = sys.argv[1]
 e = sys.argv[2]
 

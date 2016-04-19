@@ -8,6 +8,8 @@ import os
 from application.routes import migrate
 from multiprocessing import Process
 
+exit(1)
+
 cfg = 'Config'
 c = getattr(importlib.import_module('config'), cfg)
 config = {}

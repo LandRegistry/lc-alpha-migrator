@@ -170,7 +170,6 @@ def insert_landcharge_regn(cursor, reveal, class_of_charge, details_id, names, c
 
     else:
         for county in county_ids:
-            #logging.debug(county['id'])
             if len(names) > 0:
                 name = names[0]['id']
             else:
@@ -183,6 +182,7 @@ def insert_landcharge_regn(cursor, reveal, class_of_charge, details_id, names, c
                 'date': date,
                 'county': county['name'],
             })
+            break
 
     return reg_nos, reg_id
 
@@ -652,8 +652,11 @@ def insert_migrated_cancellation(cursor, data, index):
     return canc_details_id, canc_request_id
 
     
-def connect_to_psql():
-    connection = psycopg2.connect(app_config['PSQL_CONNECTION'])
+def connect_to_psql(conn_str=None):
+    if conn_str is None:
+        connection = psycopg2.connect(app_config['PSQL_CONNECTION'])
+    else:
+        connection = psycopg2.connect(conn_str)
     return connection
     
 
@@ -675,11 +678,11 @@ def commit(cursor):
    
 def rollback(cursor):
     cursor.connection.rollback()
-    
+
 
 def migrate_record(config, data):
-    # logging.debug("--- MIGRATE RECORD ---")
-    # logging.debug(data)
+    logging.debug("--- MIGRATE RECORD ---")
+    logging.debug(data)
 
 
     global app_config
