@@ -1,4 +1,4 @@
-from application.data import migrate_record
+from application.data import migrate_record, connect_to_psql, disconnect_from_psql, create_cursor, close_cursor, commit, rollback
 #import json
 import logging
 import traceback
@@ -22,6 +22,7 @@ sqlinsert_count = 0
 wait_time_manipulation = 0
 call_count_legacy_db = 0
 legacy_db_ttfb = 0
+
 
 class MigrationException(RuntimeError):
     def __init__(self, message, text=None):
@@ -136,7 +137,64 @@ def log_item_summary(data):
         for flag in item['migration_data']['flags']:
             final_log.append("  " + flag)
                
-        
+
+def check(config, start, end):
+    global app_config
+    app_config = config
+    #print(app_config)
+
+    url = "{}/land_charges_index/{}/{}".format(config['LEGACY_ADAPTER_URI'], start, end)
+    headers = {'Content-Type': 'application/json'}
+    registrations = get_from_legacy_adapter(url, headers=headers).json()
+
+    try:
+        conn = connect_to_psql(config['PSQL_CONNECTION'])
+        cursor = create_cursor(conn)
+
+        for reg in registrations:
+            #output = ''
+            output = "{}\t{}\t{}\t".format(reg['registration_no'], reg['registration_date'], reg['class_type'])
+
+            reg_no = re.sub("[^0-9]", "", str(reg['registration_no']))
+            if str(reg['registration_no']) != reg_no:
+                cursor.execute('SELECT r.id, r.registration_no, r.date, r.expired_on, rd.class_of_charge '
+                               'FROM register r, register_details rd, migration_status ms '
+                               'WHERE r.details_id=rd.id and r.id = ms.register_id and r.registration_no=%(nno)s and '
+                               'ms.original_regn_no=%(no)s and r.date=%(date)s and rd.class_of_charge=%(cls)s ', {
+                                   'no': reg['registration_no'], 'date': reg['registration_date'], 'cls': reg['class_type'],
+                                   'nno': reg_no
+                               })
+            else:
+                cursor.execute('SELECT r.id, r.registration_no, r.date, r.expired_on, rd.class_of_charge '
+                               'FROM register r, register_details rd '
+                               'WHERE r.details_id=rd.id and r.registration_no=%(no)s and r.date=%(date)s and '
+                               'rd.class_of_charge=%(cls)s', {
+                                   'no': reg['registration_no'], 'date': reg['registration_date'], 'cls': reg['class_type']
+                               })
+
+            rows = cursor.fetchall()
+            if len(rows) == 0:
+                # output += "  No rows found\t"
+                print(output + " no rows")
+            # else:
+            #     output += "  {} rows found\t".format(len(rows))
+            #     for row in rows:
+            #         output += "  {}\t{}".format(row['id'], row['expired_on'])
+
+            # output += "END {} {} {}\n".format(reg['registration_no'], reg['registration_date'], reg['class_type'])
+            # output += "\n"
+            # print(output)
+
+    finally:
+        if cursor is not None:
+            commit(cursor)
+            close_cursor(cursor)
+
+        if conn is not None:
+            disconnect_from_psql(conn)
+
+
+
 def migrate(config, start, end):
     global app_config
     global error_queue
@@ -193,7 +251,7 @@ def migrate(config, start, end):
         cdate += timedelta(days=1)
         for history in day_regs:
             # Reg is equivalend to history...
-            # logging.debug(history)
+            logging.debug(history)
             try:
     
 
