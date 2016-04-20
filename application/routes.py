@@ -161,15 +161,15 @@ def check(config, start, end):
                                'FROM register r, register_details rd, migration_status ms '
                                'WHERE r.details_id=rd.id and r.id = ms.register_id and r.registration_no=%(nno)s and '
                                'ms.original_regn_no=%(no)s and r.date=%(date)s and rd.class_of_charge=%(cls)s ', {
-                                   'no': reg['registration_no'], 'date': reg['registration_date'], 'cls': reg['class_type'],
-                                   'nno': reg_no
+                                   'no': reg['registration_no'].strip(), 'date': reg['registration_date'], 'cls': class_without_brackets(reg['class_type']),
+                                   'nno': reg_no.strip()
                                })
             else:
                 cursor.execute('SELECT r.id, r.registration_no, r.date, r.expired_on, rd.class_of_charge '
                                'FROM register r, register_details rd '
                                'WHERE r.details_id=rd.id and r.registration_no=%(no)s and r.date=%(date)s and '
                                'rd.class_of_charge=%(cls)s', {
-                                   'no': reg['registration_no'], 'date': reg['registration_date'], 'cls': reg['class_type']
+                                   'no': reg['registration_no'].strip(), 'date': reg['registration_date'], 'cls': class_without_brackets(reg['class_type'])
                                })
 
             rows = cursor.fetchall()

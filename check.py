@@ -33,7 +33,7 @@ e_year = int(sys.argv[2])
 
 # Slightly buggy: this will slice to a minimum of 1 day, so if there are too many slices it'll increase the width
 # of the range.
-slices = int(os.getenv("MIGRATOR_WORKERS", '16'))
+slices = int(os.getenv("MIGRATOR_WORKERS", '4'))
 years_at_a_go = int(os.getenv("YEAR_CHUNKS", '20'))
 
 c_year = s_year
